@@ -2,6 +2,7 @@ package de.oepnv;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.jsoup.Jsoup;
+import picocli.CommandLine.Help.Ansi;
 
 import java.time.Duration;
 import java.time.format.DateTimeParseException;
@@ -10,9 +11,13 @@ final class ConnectionFormatter {
     private ConnectionFormatter() { }
 
     static String format(int index, JsonNode connection) {
+        return format(index, connection, Ansi.OFF);
+    }
+
+    static String format(int index, JsonNode connection, Ansi ansi) {
         JsonNode summary = connection.path("summary");
         StringBuilder out = new StringBuilder("\nVerbindung " + index + ": ");
-        out.append(time(summary.path("departure"))).append(" → ").append(time(summary.path("arrival")))
+        out.append(time(summary.path("departure"), ansi)).append(" → ").append(time(summary.path("arrival")))
                 .append(" | ").append(duration(summary.path("totalDuration").asText())).append('\n');
         int legIndex = 1;
         for (JsonNode leg : connection.path("legs")) {
@@ -23,7 +28,7 @@ final class ConnectionFormatter {
             String direction = service.path("direction").asText();
             if (!direction.isBlank()) out.append(" Richtung ").append(direction);
             out.append('\n');
-            out.append("     ").append(time(leg.path("departure"))).append("  ").append(stop(leg.path("departureStop"))).append('\n');
+            out.append("     ").append(time(leg.path("departure"), ansi)).append("  ").append(stop(leg.path("departureStop"))).append('\n');
             out.append("     ").append(time(leg.path("arrival"))).append("  ").append(stop(leg.path("arrivalStop"))).append('\n');
             String legDuration = leg.path("duration").asText(service.path("duration").asText());
             if (!legDuration.isBlank()) out.append("     Dauer: ").append(duration(legDuration)).append('\n');
@@ -45,10 +50,14 @@ final class ConnectionFormatter {
     }
 
     private static String time(JsonNode event) {
+        return time(event, Ansi.OFF);
+    }
+
+    private static String time(JsonNode event, Ansi ansi) {
         String date = event.path("date").asText();
         String time = event.path("time").asText("?");
         if (time.matches("\\d{2}:\\d{2}:\\d{2}")) time = time.substring(0, 5);
-        String result = (date.isBlank() ? "" : date + " ") + time;
+        String result = ansi.string("@|bold " + (date.isBlank() ? "" : date + " ") + time + "|@");
         String delay = event.path("delay").asText();
         if (!delay.isBlank()) {
             try {

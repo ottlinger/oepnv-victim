@@ -1,6 +1,7 @@
 package de.oepnv;
 
 import org.junit.jupiter.api.Test;
+import picocli.CommandLine.Help.Ansi;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConnectionFormatterTest {
@@ -17,6 +18,28 @@ class ConnectionFormatterTest {
         assertTrue(text.contains("Bitte Hinweis beachten."));
         assertTrue(text.contains("Störungen/Hinweise"));
         assertFalse(text.contains("<b>"));
+    }
+
+    @Test
+    void highlightsOnlyDepartureTimesWhenAnsiIsEnabled() throws Exception {
+        var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
+        String text = ConnectionFormatter.format(1, connection, Ansi.ON);
+        String departure = Ansi.ON.string("@|bold 2026-11-07 12:29|@");
+        assertNotEquals("2026-11-07 12:29", departure);
+        assertTrue(text.contains("Verbindung 1: " + departure + " (+5 Min.) → "));
+        assertTrue(text.contains("     " + departure + " (+5 Min.)  Treuenbrietzen"));
+        assertFalse(text.contains(Ansi.ON.string("@|bold 2026-11-07 12:47|@")));
+        assertEquals(ConnectionFormatter.format(1, connection),
+                text.replaceAll("\\u001B\\[[;\\d]*m", ""));
+    }
+
+    @Test
+    void leavesPlainTextFreeOfAnsiCodesAndMarkup() throws Exception {
+        var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
+        String text = ConnectionFormatter.format(1, connection, Ansi.OFF);
+        assertTrue(text.contains("Verbindung 1: 2026-11-07 12:29 (+5 Min.) → "));
+        assertFalse(text.contains("\u001B"));
+        assertFalse(text.contains("@|"));
     }
 
     @Test

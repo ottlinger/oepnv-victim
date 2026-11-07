@@ -13,6 +13,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,10 +40,18 @@ final class BvgClient {
     }
 
     Result search(String origin, String destination, int limit) throws IOException, InterruptedException {
+        return search(origin, destination, limit, null);
+    }
+
+    Result search(String origin, String destination, int limit, LocalDateTime departure)
+            throws IOException, InterruptedException {
         // Die Verbindungen selbst sind nicht im SSR-HTML. Die Next.js-Konfiguration
         // enthält die Endpunkte, deren Antworten auch die UI-Detailansicht versorgen.
-        URI initialPage = query(base.resolve(PAGE), Map.of("origin", origin,
-                "destination", destination, "timeSel", "now"));
+        Map<String, String> initialParams = new LinkedHashMap<>();
+        initialParams.put("origin", origin);
+        initialParams.put("destination", destination);
+        departureParams(initialParams, departure, "now");
+        URI initialPage = query(base.resolve(PAGE), initialParams);
         Endpoints endpoints = parseEndpoints(get(initialPage, "text/html"), base);
         Station from = resolveStation(endpoints.locations(), origin);
         Station to = resolveStation(endpoints.locations(), destination);
@@ -53,15 +63,17 @@ final class BvgClient {
         pageParams.put("originName", from.name());
         pageParams.put("destinationId", to.id());
         pageParams.put("destinationName", to.name());
-        pageParams.put("timeSel", "now");
+        departureParams(pageParams, departure, "now");
         for (String product : List.of("sbahn", "subway", "bus", "tram", "ferry",
                 "longDistanceTraffic", "regionalTraffic")) {
             pageParams.put(product, "on");
         }
         URI pageUrl = query(base.resolve(PAGE), pageParams);
-        URI connectionsUrl = query(endpoints.connections(), Map.of(
+        Map<String, String> connectionParams = new LinkedHashMap<>(Map.of(
                 "language", "de", "SID", from.id(), "ZID", to.id(),
-                "timeSel", "depart", "products", "127", "realtime", "true"));
+                "products", "127", "realtime", "true"));
+        departureParams(connectionParams, departure, "depart");
+        URI connectionsUrl = query(endpoints.connections(), connectionParams);
         JsonNode response = JSON.readTree(get(connectionsUrl, "application/json"));
         JsonNode connections = response.path("connections");
         if (!connections.isArray()) {
@@ -76,6 +88,14 @@ final class BvgClient {
             selected.add(connection);
         }
         return new Result(from.name(), to.name(), pageUrl, List.copyOf(selected));
+    }
+
+    private static void departureParams(Map<String, String> params, LocalDateTime departure, String defaultSelection) {
+        params.put("timeSel", departure == null ? defaultSelection : "depart");
+        if (departure != null) {
+            params.put("date", departure.toLocalDate().toString());
+            params.put("time", departure.format(DateTimeFormatter.ofPattern("HH:mm")));
+        }
     }
 
     private Station resolveStation(URI endpoint, String name) throws IOException, InterruptedException {

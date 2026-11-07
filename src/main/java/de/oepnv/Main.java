@@ -8,6 +8,10 @@ import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.concurrent.Callable;
 
 @Command(name = "oepnv-victim", mixinStandardHelpOptions = true, version = "0.1.0",
@@ -20,6 +24,11 @@ public final class Main implements Callable<Integer> {
     @Option(names = {"--ziel", "--to"}, required = true, paramLabel = "BAHNHOF",
             description = "Zielbahnhof, z. B. 'Jüterbog, Bahnhof'.")
     private String destination;
+
+    @Option(names = {"--startzeit", "--departure"}, paramLabel = "\"YYYY-MM-DD HH:mm\"",
+            converter = DepartureTimeConverter.class,
+            description = "Abfahrtszeit in Berlin, z. B. '2026-11-07 15:22' (Standard: jetzt).")
+    private LocalDateTime departure;
 
     @Option(names = "--limit", defaultValue = "5", description = "Maximale Anzahl aus der ersten Ergebnisseite (Standard: 5).")
     private int limit;
@@ -40,7 +49,7 @@ public final class Main implements Callable<Integer> {
                     "Start und Ziel dürfen nicht leer sein; --limit und --timeout müssen größer als 0 sein.");
         }
         try {
-            BvgClient.Result result = new BvgClient(Duration.ofSeconds(timeout)).search(start, destination, limit);
+            BvgClient.Result result = new BvgClient(Duration.ofSeconds(timeout)).search(start, destination, limit, departure);
             if (json) {
                 spec.commandLine().getOut().println(BvgClient.JSON.writerWithDefaultPrettyPrinter()
                         .writeValueAsString(result.connections()));
@@ -53,7 +62,8 @@ public final class Main implements Callable<Integer> {
                 }
                 int index = 1;
                 for (JsonNode connection : result.connections()) {
-                    spec.commandLine().getOut().println(ConnectionFormatter.format(index++, connection));
+                    spec.commandLine().getOut().println(ConnectionFormatter.format(index++, connection,
+                            spec.commandLine().getColorScheme().ansi()));
                 }
             }
             return 0;
@@ -64,6 +74,23 @@ public final class Main implements Callable<Integer> {
         } catch (Exception e) {
             spec.commandLine().getErr().println("Fehler: " + e.getMessage());
             return 1;
+        }
+    }
+
+    public static final class DepartureTimeConverter implements CommandLine.ITypeConverter<LocalDateTime> {
+        private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
+                .withResolverStyle(ResolverStyle.STRICT);
+
+        @Override
+        public LocalDateTime convert(String value) {
+            try {
+                if (!value.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")) {
+                    throw new CommandLine.TypeConversionException("Format: YYYY-MM-DD HH:mm, z. B. 2026-11-07 15:22.");
+                }
+                return LocalDateTime.parse(value, FORMAT);
+            } catch (DateTimeParseException e) {
+                throw new CommandLine.TypeConversionException("Ungültige Abfahrtszeit; Format: YYYY-MM-DD HH:mm.");
+            }
         }
     }
 

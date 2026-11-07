@@ -11,6 +11,7 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -73,6 +74,30 @@ class BvgClientTest {
         String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
         assertTrue(page.contains("destinationName=Jüterbog, Bahnhof"));
         assertTrue(page.contains("regionalTraffic=on"));
+        assertTrue(page.contains("timeSel=now"));
+        assertTrue(requests.get(0).contains("timeSel=now"));
+        String connectionRequest = requests.stream().filter(r -> r.startsWith("/connections?")).findFirst().orElseThrow();
+        assertTrue(connectionRequest.contains("timeSel=depart"));
+        for (String uri : List.of(page, requests.get(0), connectionRequest)) {
+            assertFalse(uri.matches(".*[?&]date=.*"));
+            assertFalse(uri.matches(".*[?&]time=.*"));
+        }
+    }
+
+    @Test
+    void passesConfiguredDepartureToPageAndConnectionSearch() throws Exception {
+        var result = new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", 1,
+                        LocalDateTime.of(2026, 11, 7, 15, 22));
+        String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
+        String connectionRequest = requests.stream().filter(r -> r.startsWith("/connections?")).findFirst().orElseThrow();
+        for (String uri : List.of(requests.get(0), page, connectionRequest)) {
+            assertTrue(uri.contains("timeSel=depart"), uri);
+            assertTrue(uri.contains("date=2026-11-07"), uri);
+            assertTrue(uri.contains("time=15:22"), uri);
+            assertFalse(uri.contains("timeSel=now"), uri);
+        }
+        assertEquals(1, result.connections().size());
     }
 
     @Test
