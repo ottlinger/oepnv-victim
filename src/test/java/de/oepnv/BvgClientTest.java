@@ -38,7 +38,7 @@ class BvgClientTest {
         viaLocations = "[{\"type\":\"HST\",\"name\":\"S Potsdam Hauptbahnhof\",\"id\":\"via-id\"}]";
         status = 200;
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/", exchange -> {
+        server.createContext("/", (final var exchange) -> {
             String uri = URLDecoder.decode(exchange.getRequestURI().toString(), StandardCharsets.UTF_8);
             requests.add(uri);
             String path = exchange.getRequestURI().getPath();
@@ -80,15 +80,15 @@ class BvgClientTest {
         assertNull(result.via());
         assertEquals(4, requests.size());
         assertTrue(requests.get(0).startsWith("/de/verbindungen/fahrplanauskunft?"));
-        assertTrue(requests.stream().anyMatch(r -> r.contains("input=Jüterbog, Bahnhof")));
-        assertTrue(requests.stream().anyMatch(r -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
+        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("input=Jüterbog, Bahnhof")));
+        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
                 && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("products=127")));
         String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
         assertTrue(page.contains("destinationName=Jüterbog, Bahnhof"));
         assertTrue(page.contains("regionalTraffic=on"));
         assertTrue(page.contains("timeSel=now"));
         assertTrue(requests.get(0).contains("timeSel=now"));
-        String connectionRequest = requests.stream().filter(r -> r.startsWith("/connections?")).findFirst().orElseThrow();
+        String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
         assertTrue(connectionRequest.contains("timeSel=depart"));
         for (String uri : List.of(page, requests.get(0), connectionRequest)) {
             assertFalse(uri.matches(".*[?&]date=.*"));
@@ -102,7 +102,7 @@ class BvgClientTest {
                 .search("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", 1,
                         LocalDateTime.of(2026, 11, 7, 15, 22));
         String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
-        String connectionRequest = requests.stream().filter(r -> r.startsWith("/connections?")).findFirst().orElseThrow();
+        String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
         for (String uri : List.of(requests.get(0), page, connectionRequest)) {
             assertTrue(uri.contains("timeSel=depart"), uri);
             assertTrue(uri.contains("date=2026-11-07"), uri);
@@ -124,15 +124,15 @@ class BvgClientTest {
         assertEquals("S Potsdam Hauptbahnhof", result.via());
         assertEquals(1, result.connections().size());
         assertCombinedViaJourney(result.connections().get(0));
-        assertTrue(requests.stream().anyMatch(r -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
+        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
                 && r.contains("ZID=via-id") && r.contains("time=23:50")));
-        assertTrue(requests.stream().anyMatch(r -> r.contains("SID=via-id")
+        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=via-id")
                 && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("date=2026-11-08")
                 && r.contains("time=00:08")));
         assertEquals(6, requests.size());
     }
 
-    private static void assertCombinedViaJourney(com.fasterxml.jackson.databind.JsonNode combined) {
+    private static void assertCombinedViaJourney(final com.fasterxml.jackson.databind.JsonNode combined) {
         assertEquals(2, combined.path("legs").size());
         assertEquals("S Potsdam Hauptbahnhof", combined.path("legs").get(0).path("arrivalStop").path("name").asText());
         assertEquals("00:10:00", combined.path("legs").get(1).path("departure").path("time").asText());
@@ -156,10 +156,11 @@ class BvgClientTest {
         IOException error = assertThrows(IOException.class, () -> new BvgClient(base, Duration.ofSeconds(5))
                 .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam"));
         assertTrue(error.getMessage().contains("Potsdam A; Potsdam B"));
-        assertFalse(requests.stream().anyMatch(r -> r.startsWith("/connections?")));
+        assertFalse(requests.stream().anyMatch((final var r) -> r.startsWith("/connections?")));
     }
 
-    private static String journey(String from, String to, String departure, String arrival, String delay) {
+    private static String journey(final String from, final String to, final String departure,
+                                  final String arrival, final String delay) {
         String departureEvent = "{\"date\":\"" + departure.substring(0, 10) + "\",\"time\":\"" + departure.substring(11) + "\"}";
         String arrivalEvent = "{\"date\":\"" + arrival.substring(0, 10) + "\",\"time\":\"" + arrival.substring(11)
                 + "\",\"delay\":\"" + delay + "\"}";

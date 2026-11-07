@@ -10,11 +10,11 @@ import java.time.format.DateTimeParseException;
 final class ConnectionFormatter {
     private ConnectionFormatter() { }
 
-    static String format(int index, JsonNode connection) {
+    static String format(final int index, final JsonNode connection) {
         return format(index, connection, Ansi.OFF);
     }
 
-    static String format(int index, JsonNode connection, Ansi ansi) {
+    static String format(final int index, final JsonNode connection, final Ansi ansi) {
         JsonNode summary = connection.path("summary");
         StringBuilder out = new StringBuilder("\nVerbindung " + index + ": ");
         out.append(time(summary.path("departure"), ansi)).append(" → ").append(time(summary.path("arrival")))
@@ -43,17 +43,17 @@ final class ConnectionFormatter {
         return out.toString().stripTrailing();
     }
 
-    private static String stop(JsonNode stop) {
+    private static String stop(final JsonNode stop) {
         String name = stop.path("name").asText("unbekannte Haltestelle");
         String track = stop.path("track").asText();
         return name + (track.isBlank() ? "" : " (" + track + ")");
     }
 
-    private static String time(JsonNode event) {
+    private static String time(final JsonNode event) {
         return time(event, Ansi.OFF);
     }
 
-    private static String time(JsonNode event, Ansi ansi) {
+    private static String time(final JsonNode event, final Ansi ansi) {
         String date = event.path("date").asText();
         String time = event.path("time").asText("?");
         if (time.matches("\\d{2}:\\d{2}:\\d{2}")) time = time.substring(0, 5);
@@ -63,26 +63,26 @@ final class ConnectionFormatter {
             try {
                 long minutes = Duration.parse(delay).toMinutes();
                 result += " (" + (minutes >= 0 ? "+" : "") + minutes + " Min.)";
-            } catch (DateTimeParseException e) {
+            } catch (final DateTimeParseException e) {
                 result += " (Verspätung: " + delay + ")";
             }
         }
         return result;
     }
 
-    static String duration(String value) {
+    static String duration(final String value) {
         if (value.isBlank()) return "Dauer unbekannt";
         try {
             long seconds = Duration.parse(value).getSeconds();
             long minutes = seconds / 60;
             if (seconds % 60 != 0) return seconds + " Sek.";
             return minutes < 60 ? minutes + " Min." : (minutes / 60) + " Std. " + (minutes % 60) + " Min.";
-        } catch (DateTimeParseException e) {
+        } catch (final DateTimeParseException e) {
             return value;
         }
     }
 
-    private static void warnings(StringBuilder out, JsonNode node) {
+    private static void warnings(final StringBuilder out, final JsonNode node) {
         for (String key : new String[]{"warnings", "messages", "notices"}) {
             JsonNode values = node.path(key);
             if (values.isMissingNode() || values.isNull()) continue;
@@ -94,7 +94,7 @@ final class ConnectionFormatter {
         }
     }
 
-    private static void warning(StringBuilder out, JsonNode warning) {
+    private static void warning(final StringBuilder out, final JsonNode warning) {
         String text = warning.isTextual() ? warning.asText()
                 : warning.path("text").asText(warning.path("message").asText(warning.toString()));
         out.append("     Hinweis: ").append(Jsoup.parse(text).text()).append('\n');

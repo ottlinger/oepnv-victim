@@ -23,18 +23,19 @@ public final class Main implements Callable<Integer> {
     private final JourneySearch search;
 
     public Main() {
-        this((origin, destination, limit, departure, via, timeout) ->
+        this((final var origin, final var destination, final var limit,
+              final var departure, final var via, final var timeout) ->
                 new BvgClient(timeout).search(origin, destination, limit, departure, via));
     }
 
-    Main(JourneySearch search) {
+    Main(final JourneySearch search) {
         this.search = search;
     }
 
     @FunctionalInterface
     interface JourneySearch {
-        BvgClient.Result search(String origin, String destination, int limit, LocalDateTime departure,
-                                String via, Duration timeout) throws IOException, InterruptedException;
+        BvgClient.Result search(final String origin, final String destination, final int limit,
+                                final LocalDateTime departure, final String via, final Duration timeout) throws IOException, InterruptedException;
     }
 
     @Option(names = "--from", required = true, paramLabel = "STATION",
@@ -91,11 +92,11 @@ public final class Main implements Callable<Integer> {
                 }
             }
             return 0;
-        } catch (InterruptedException e) {
+        } catch (final InterruptedException e) {
             Thread.currentThread().interrupt();
             spec.commandLine().getErr().println("Fehler: Abfrage wurde unterbrochen.");
             return 1;
-        } catch (Exception e) {
+        } catch (final Exception e) {
             spec.commandLine().getErr().println("Fehler: " + e.getMessage());
             return 1;
         }
@@ -106,19 +107,19 @@ public final class Main implements Callable<Integer> {
                 .withResolverStyle(ResolverStyle.STRICT);
 
         @Override
-        public LocalDateTime convert(String value) {
+        public LocalDateTime convert(final String value) {
             try {
                 if (!value.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")) {
                     throw new CommandLine.TypeConversionException("Format: YYYY-MM-DD HH:mm, z. B. 2026-11-07 15:22.");
                 }
                 return LocalDateTime.parse(value, FORMAT);
-            } catch (DateTimeParseException e) {
+            } catch (final DateTimeParseException e) {
                 throw new CommandLine.TypeConversionException("Ungültige Abfahrtszeit; Format: YYYY-MM-DD HH:mm.");
             }
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(final String[] args) {
         System.exit(new CommandLine(new Main()).execute(args));
     }
 }

@@ -28,27 +28,28 @@ final class BvgClient {
     private final Duration timeout;
     private final HttpClient http;
 
-    BvgClient(Duration timeout) {
+    BvgClient(final Duration timeout) {
         this(URI.create("https://www.bvg.de"), timeout);
     }
 
-    BvgClient(URI base, Duration timeout) {
+    BvgClient(final URI base, final Duration timeout) {
         this.base = base;
         this.timeout = timeout;
         this.http = HttpClient.newBuilder().connectTimeout(timeout)
                 .followRedirects(HttpClient.Redirect.NORMAL).build();
     }
 
-    Result search(String origin, String destination, int limit) throws IOException, InterruptedException {
+    Result search(final String origin, final String destination, final int limit) throws IOException, InterruptedException {
         return search(origin, destination, limit, null);
     }
 
-    Result search(String origin, String destination, int limit, LocalDateTime departure)
+    Result search(final String origin, final String destination, final int limit, final LocalDateTime departure)
             throws IOException, InterruptedException {
         return search(origin, destination, limit, departure, null);
     }
 
-    Result search(String origin, String destination, int limit, LocalDateTime departure, String via)
+    Result search(final String origin, final String destination, final int limit,
+                  final LocalDateTime departure, final String via)
             throws IOException, InterruptedException {
         // Journey data are not included in the server-rendered HTML. The Next.js configuration
         // provides the endpoints whose responses also populate the UI's journey details panel.
@@ -98,8 +99,8 @@ final class BvgClient {
                 pageUrl, List.copyOf(selected));
     }
 
-    private List<JsonNode> searchConnections(URI endpoint, Station from, Station to, int limit,
-                                            LocalDateTime departure) throws IOException, InterruptedException {
+    private List<JsonNode> searchConnections(final URI endpoint, final Station from, final Station to,
+                                            final int limit, final LocalDateTime departure) throws IOException, InterruptedException {
         Map<String, String> connectionParams = new LinkedHashMap<>(Map.of(
                 "language", "de", "SID", from.id(), "ZID", to.id(),
                 "products", "127", "realtime", "true"));
@@ -121,7 +122,8 @@ final class BvgClient {
         return List.copyOf(selected);
     }
 
-    private static void departureParams(Map<String, String> params, LocalDateTime departure, String defaultSelection) {
+    private static void departureParams(final Map<String, String> params, final LocalDateTime departure,
+                                        final String defaultSelection) {
         params.put("timeSel", departure == null ? defaultSelection : "depart");
         if (departure != null) {
             params.put("date", departure.toLocalDate().toString());
@@ -129,11 +131,11 @@ final class BvgClient {
         }
     }
 
-    private Station resolveStation(URI endpoint, String name) throws IOException, InterruptedException {
+    private Station resolveStation(final URI endpoint, final String name) throws IOException, InterruptedException {
         return selectStation(JSON.readTree(get(query(endpoint, Map.of("input", name)), "application/json")), name);
     }
 
-    static Station selectStation(JsonNode locations, String input) throws IOException {
+    static Station selectStation(final JsonNode locations, final String input) throws IOException {
         if (!locations.isArray()) throw new IOException("Unerwartete BVG-Antwort bei der Bahnhofssuche.");
         List<Station> candidates = new ArrayList<>();
         for (JsonNode location : locations) {
@@ -143,7 +145,7 @@ final class BvgClient {
                 if (!candidates.contains(station)) candidates.add(station);
             }
         }
-        List<Station> exact = candidates.stream().filter(s -> s.name().equalsIgnoreCase(input.strip())).toList();
+        List<Station> exact = candidates.stream().filter((final var s) -> s.name().equalsIgnoreCase(input.strip())).toList();
         if (exact.size() == 1) return exact.get(0);
         if (exact.isEmpty() && candidates.size() == 1) return candidates.get(0);
         if (candidates.isEmpty()) throw new IOException("Kein Bahnhof gefunden für '" + input + "'.");
@@ -151,7 +153,7 @@ final class BvgClient {
                 + candidates.stream().map(Station::name).collect(Collectors.joining("; ")));
     }
 
-    static Endpoints parseEndpoints(String html, URI base) throws IOException {
+    static Endpoints parseEndpoints(final String html, final URI base) throws IOException {
         Element data = Jsoup.parse(html).selectFirst("script#__NEXT_DATA__");
         if (data == null) throw new IOException("BVG-HTML enthält keine __NEXT_DATA__-Konfiguration; Seitenstruktur möglicherweise geändert.");
         JsonNode props = JSON.readTree(data.data()).path("props").path("pageProps");
@@ -165,29 +167,29 @@ final class BvgClient {
         return new Endpoints(locationsUri, sameOrigin(base, connections));
     }
 
-    private static URI sameOrigin(URI base, String path) throws IOException {
+    private static URI sameOrigin(final URI base, final String path) throws IOException {
         try {
             URI uri = base.resolve(path);
             if (!base.getScheme().equals(uri.getScheme()) || !base.getAuthority().equals(uri.getAuthority())) {
                 throw new IOException("BVG-Konfiguration verweist auf einen fremden Server.");
             }
             return uri;
-        } catch (IllegalArgumentException e) {
+        } catch (final IllegalArgumentException e) {
             throw new IOException("Ungültiger Suchendpunkt im BVG-HTML.", e);
         }
     }
 
-    static URI query(URI endpoint, Map<String, String> params) {
-        String query = params.entrySet().stream().map(e -> encode(e.getKey()) + "=" + encode(e.getValue()))
+    static URI query(final URI endpoint, final Map<String, String> params) {
+        String query = params.entrySet().stream().map((final var e) -> encode(e.getKey()) + "=" + encode(e.getValue()))
                 .collect(Collectors.joining("&"));
         return URI.create(endpoint + (endpoint.getRawQuery() == null ? "?" : "&") + query);
     }
 
-    private static String encode(String value) {
+    private static String encode(final String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private String get(URI uri, String accept) throws IOException, InterruptedException {
+    private String get(final URI uri, final String accept) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(uri).timeout(timeout)
                 .header("Accept", accept).header("Accept-Language", "de-DE,de;q=0.9")
                 .header("User-Agent", "oepnv-victim/0.1 (Java CLI)").GET().build();

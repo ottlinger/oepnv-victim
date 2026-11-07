@@ -13,25 +13,25 @@ import java.time.LocalDateTime;
 final class ViaJourney {
     private ViaJourney() { }
 
-    static LocalDateTime effectiveTime(JsonNode event) throws IOException {
+    static LocalDateTime effectiveTime(final JsonNode event) throws IOException {
         LocalDateTime time = scheduledTime(event);
         String delay = event.path("delay").asText();
         try {
             return delay.isBlank() ? time : time.plus(Duration.parse(delay));
-        } catch (DateTimeException e) {
+        } catch (final DateTimeException e) {
             throw new IOException("Ungültige BVG-Verspätung für die Suche über eine Zwischenstation.", e);
         }
     }
 
-    private static LocalDateTime scheduledTime(JsonNode event) throws IOException {
+    private static LocalDateTime scheduledTime(final JsonNode event) throws IOException {
         try {
             return LocalDateTime.parse(event.path("date").asText() + "T" + event.path("time").asText());
-        } catch (DateTimeException e) {
+        } catch (final DateTimeException e) {
             throw new IOException("BVG liefert keine gültige Zeit für die Suche über eine Zwischenstation.", e);
         }
     }
 
-    static JsonNode combine(JsonNode first, JsonNode second, String via) throws IOException {
+    static JsonNode combine(final JsonNode first, final JsonNode second, final String via) throws IOException {
         JsonNode firstSummary = first.path("summary");
         JsonNode secondSummary = second.path("summary");
         ObjectNode summary = firstSummary.deepCopy();
@@ -41,8 +41,8 @@ final class ViaJourney {
         summary.put("hasWarnings", firstSummary.path("hasWarnings").asBoolean()
                 || secondSummary.path("hasWarnings").asBoolean());
         ArrayNode services = summary.putArray("services");
-        firstSummary.path("services").forEach(service -> services.add(service.deepCopy()));
-        secondSummary.path("services").forEach(service -> services.add(service.deepCopy()));
+        firstSummary.path("services").forEach((final var service) -> services.add(service.deepCopy()));
+        secondSummary.path("services").forEach((final var service) -> services.add(service.deepCopy()));
         mergeWarnings(summary, firstSummary, secondSummary);
 
         ObjectNode result = BvgClient.JSON.createObjectNode();
@@ -50,21 +50,21 @@ final class ViaJourney {
         result.put("via", via);
         result.set("summary", summary);
         ArrayNode legs = result.putArray("legs");
-        first.path("legs").forEach(leg -> legs.add(leg.deepCopy()));
-        second.path("legs").forEach(leg -> legs.add(leg.deepCopy()));
+        first.path("legs").forEach((final var leg) -> legs.add(leg.deepCopy()));
+        second.path("legs").forEach((final var leg) -> legs.add(leg.deepCopy()));
         mergeWarnings(result, first, second);
         // Preserve every original field for --json, without inventing a BVG journey ID.
         result.putArray("viaConnections").add(first.deepCopy()).add(second.deepCopy());
         return result;
     }
 
-    private static void mergeWarnings(ObjectNode target, JsonNode first, JsonNode second) {
+    private static void mergeWarnings(final ObjectNode target, final JsonNode first, final JsonNode second) {
         for (String key : new String[]{"warnings", "messages", "notices"}) {
             if (!first.hasNonNull(key) && !second.hasNonNull(key)) continue;
             ArrayNode values = target.putArray(key);
             for (JsonNode source : new JsonNode[]{first, second}) {
                 JsonNode value = source.path(key);
-                if (value.isArray()) value.forEach(item -> values.add(item.deepCopy()));
+                if (value.isArray()) value.forEach((final var item) -> values.add(item.deepCopy()));
                 else if (!value.isMissingNode() && !value.isNull()) values.add(value.deepCopy());
             }
         }

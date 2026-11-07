@@ -36,7 +36,8 @@ class MainTest {
         var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+        Main main = new Main((final var origin, final var destination, final var limit,
+                              final var departure, final var via, final var timeout) -> {
             assertEquals("Treuenbrietzen", origin);
             assertEquals("Jüterbog", destination);
             assertEquals(2, limit);
@@ -68,7 +69,8 @@ class MainTest {
         var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((origin, destination, limit, departure, via, timeout) ->
+        Main main = new Main((final var origin, final var destination, final var limit,
+                              final var departure, final var via, final var timeout) ->
                 new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of(connection)));
         CommandLine command = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
                 .setColorScheme(new CommandLine.Help.ColorScheme.Builder().ansi(CommandLine.Help.Ansi.ON).build());
@@ -85,7 +87,8 @@ class MainTest {
     @Test
     void emptyResultsUseDefaultsAndReturnSuccessWithoutViaHeader() {
         StringWriter out = new StringWriter();
-        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+        Main main = new Main((final var origin, final var destination, final var limit,
+                              final var departure, final var via, final var timeout) -> {
             assertEquals(5, limit);
             assertEquals(Duration.ofSeconds(30), timeout);
             assertNull(departure);
@@ -101,7 +104,8 @@ class MainTest {
     @Test
     void emptyJsonResultsAreAnEmptyArray() throws Exception {
         StringWriter out = new StringWriter();
-        Main main = new Main((origin, destination, limit, departure, via, timeout) ->
+        Main main = new Main((final var origin, final var destination, final var limit,
+                              final var departure, final var via, final var timeout) ->
                 new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of()));
         assertEquals(0, new CommandLine(main).setOut(new PrintWriter(out))
                 .execute("--from", "A", "--to", "B", "--json"));
@@ -112,7 +116,8 @@ class MainTest {
     void queryErrorsAreWrittenOnlyToStderr() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+        Main main = new Main((final var origin, final var destination, final var limit,
+                              final var departure, final var via, final var timeout) -> {
             throw new IOException("Station ist nicht eindeutig: Station A; Station B");
         });
         int code = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
@@ -126,7 +131,8 @@ class MainTest {
     void interruptedQueryRestoresInterruptFlagAndReturnsError() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+        Main main = new Main((final var origin, final var destination, final var limit,
+                              final var departure, final var via, final var timeout) -> {
             throw new InterruptedException("cancelled");
         });
         assertFalse(Thread.currentThread().isInterrupted());

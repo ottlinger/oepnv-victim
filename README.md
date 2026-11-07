@@ -10,6 +10,8 @@ A Java command-line application for [BVG](https://www.bvg) journey planning in B
 The origin and destination are configurable; each journey is displayed with its
 individual legs.
 
+Created with the help of AI.
+
 ## Requirements and build
 
 - [Java](https://java.sun.com) 17 or later
@@ -149,10 +151,20 @@ not a list of all intermediate stops.
 
 ```sh
 ./mvnw test
+
+# Run tests, build the JAR and enforce the coverage thresholds
+./mvnw clean verify
 ```
+
+JaCoCo requires at least **80% line coverage and 80% branch coverage** across the
+project during Maven's `verify` phase. The build fails if either threshold is
+missed; the GitHub Actions build also enforces these checks. No production classes
+are excluded. The HTML report is available at `target/site/jacoco/index.html`,
+and the XML report uploaded to Codecov is generated at `target/jacoco/jacoco.xml`.
 
 The tests run without accessing external BVG services: a local HTTP test server
 checks the workflow from HTML parsing to the details query. Further tests cover
 name resolution, UTF-8 and URL parameters, error cases, journey legs, platforms,
 delays, walking transfers, journeys crossing midnight, notices, terminal styling,
-configured departure times, intermediate stations and onward journeys, and CLI validation.
+configured departure times, intermediate stations and onward journeys, CLI validation,
+text and JSON output, query errors, and interruption handling.
