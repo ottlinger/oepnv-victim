@@ -1,5 +1,7 @@
 # oepnv-victim
 
+<img src="docs/logo.svg" alt="oepnv-victim logo: a train with a disruption warning" width="128" height="128">
+
 [![GitHub Actions main branch status](https://github.com/ottlinger/oepnv-victim/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/ottlinger/oepnv-victim/actions/workflows/maven.yml)
 [![Dependabot enabled](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/ottlinger/oepnv-victim/blob/main/.github/dependabot.yml)
 [![codecov](https://codecov.io/gh/ottlinger/oepnv-victim/branch/main/graph/badge.svg)](https://codecov.io/gh/ottlinger/oepnv-victim)
@@ -11,6 +13,9 @@ The origin and destination are configurable; each journey is displayed with its
 individual legs.
 
 Created with the help of AI.
+
+The [project artwork](docs/README.md) includes editable SVG sources and PNG exports
+of the logo and GitHub social preview.
 
 ## Requirements and build
 
