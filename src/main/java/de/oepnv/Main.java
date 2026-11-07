@@ -7,6 +7,7 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -19,6 +20,23 @@ import java.util.concurrent.Callable;
         footer = "Stationen müssen eindeutig sein. Bei mehrdeutigen Namen gibt das Tool eine Liste möglicher "
                 + "Stationen aus der BVG-Stationssuche aus; bitte mit einem vollständigen Namen erneut aufrufen.")
 public final class Main implements Callable<Integer> {
+    private final JourneySearch search;
+
+    public Main() {
+        this((origin, destination, limit, departure, via, timeout) ->
+                new BvgClient(timeout).search(origin, destination, limit, departure, via));
+    }
+
+    Main(JourneySearch search) {
+        this.search = search;
+    }
+
+    @FunctionalInterface
+    interface JourneySearch {
+        BvgClient.Result search(String origin, String destination, int limit, LocalDateTime departure,
+                                String via, Duration timeout) throws IOException, InterruptedException;
+    }
+
     @Option(names = "--from", required = true, paramLabel = "STATION",
             description = "Eindeutige Startstation, z. B. 'Treuenbrietzen, Bahnhof'.")
     private String origin;
@@ -55,7 +73,7 @@ public final class Main implements Callable<Integer> {
                     "--from, --to und --via dürfen nicht leer sein; --limit und --timeout müssen größer als 0 sein.");
         }
         try {
-            BvgClient.Result result = new BvgClient(Duration.ofSeconds(timeout)).search(origin, destination, limit, departure, via);
+            BvgClient.Result result = search.search(origin, destination, limit, departure, via, Duration.ofSeconds(timeout));
             if (json) {
                 spec.commandLine().getOut().println(BvgClient.JSON.writerWithDefaultPrettyPrinter()
                         .writeValueAsString(result.connections()));

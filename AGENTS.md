@@ -1,7 +1,7 @@
 # Agentic instructions
 
 * Java17 language style
-* no star imports
+* no star imports, parameters marked with final
 * add unit and integration tests
 * coverage at least 80%
 

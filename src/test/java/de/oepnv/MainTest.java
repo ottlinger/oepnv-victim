@@ -3,9 +3,13 @@ package de.oepnv;
 import org.junit.jupiter.api.Test;
 import picocli.CommandLine;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -25,6 +29,117 @@ class MainTest {
         assertTrue(out.toString().contains("BVG-Stationssuche"));
         assertFalse(out.toString().contains("--startzeit"));
         assertTrue(out.toString().contains("--departure"));
+    }
+
+    @Test
+    void rendersJourneysAndPassesAllSearchOptionsWithoutNetwork() throws Exception {
+        var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+            assertEquals("Treuenbrietzen", origin);
+            assertEquals("Jüterbog", destination);
+            assertEquals(2, limit);
+            assertEquals(LocalDateTime.of(2026, 11, 7, 15, 22), departure);
+            assertEquals("Potsdam", via);
+            assertEquals(Duration.ofSeconds(12), timeout);
+            return new BvgClient.Result("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof",
+                    "S Potsdam Hauptbahnhof", URI.create("https://example.org/not-for-output"),
+                    List.of(connection, connection));
+        });
+        CommandLine command = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .setColorScheme(new CommandLine.Help.ColorScheme.Builder().ansi(CommandLine.Help.Ansi.ON).build());
+        int code = command.execute("--from", "Treuenbrietzen", "--to", "Jüterbog", "--via", "Potsdam",
+                "--departure", "2026-11-07 15:22", "--limit", "2", "--timeout", "12");
+        assertEquals(0, code);
+        assertTrue(out.toString().contains("Start: Treuenbrietzen, Bahnhof"));
+        assertTrue(out.toString().contains("Ziel:  Jüterbog, Bahnhof"));
+        assertTrue(out.toString().contains("Via:   S Potsdam Hauptbahnhof"));
+        assertTrue(out.toString().contains("Verbindung 1:"));
+        assertTrue(out.toString().contains("Verbindung 2:"));
+        assertTrue(out.toString().contains(CommandLine.Help.Ansi.ON.string("@|bold 2026-11-07 12:29|@")));
+        assertFalse(out.toString().contains("https://"));
+        assertFalse(out.toString().contains("BVG:"));
+        assertEquals("", err.toString());
+    }
+
+    @Test
+    void emitsOnlyOriginalJsonWithoutHeadersOrAnsiCodes() throws Exception {
+        var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main((origin, destination, limit, departure, via, timeout) ->
+                new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of(connection)));
+        CommandLine command = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .setColorScheme(new CommandLine.Help.ColorScheme.Builder().ansi(CommandLine.Help.Ansi.ON).build());
+        assertEquals(0, command.execute("--from", "A", "--to", "B", "--json"));
+        var json = BvgClient.JSON.readTree(out.toString());
+        assertTrue(json.isArray());
+        assertEquals(1, json.size());
+        assertEquals(connection, json.get(0));
+        assertFalse(out.toString().contains("\u001B"));
+        assertFalse(out.toString().contains("Start:"));
+        assertEquals("", err.toString());
+    }
+
+    @Test
+    void emptyResultsUseDefaultsAndReturnSuccessWithoutViaHeader() {
+        StringWriter out = new StringWriter();
+        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+            assertEquals(5, limit);
+            assertEquals(Duration.ofSeconds(30), timeout);
+            assertNull(departure);
+            assertNull(via);
+            return new BvgClient.Result(origin, destination, null, URI.create("https://example.org"), List.of());
+        });
+        assertEquals(0, new CommandLine(main).setOut(new PrintWriter(out)).execute("--from", "A", "--to", "B"));
+        assertTrue(out.toString().contains("Keine Verbindungen gefunden."));
+        assertFalse(out.toString().contains("Via:"));
+        assertFalse(out.toString().contains("Verbindung 1:"));
+    }
+
+    @Test
+    void emptyJsonResultsAreAnEmptyArray() throws Exception {
+        StringWriter out = new StringWriter();
+        Main main = new Main((origin, destination, limit, departure, via, timeout) ->
+                new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of()));
+        assertEquals(0, new CommandLine(main).setOut(new PrintWriter(out))
+                .execute("--from", "A", "--to", "B", "--json"));
+        assertEquals(BvgClient.JSON.createArrayNode(), BvgClient.JSON.readTree(out.toString()));
+    }
+
+    @Test
+    void queryErrorsAreWrittenOnlyToStderr() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+            throw new IOException("Station ist nicht eindeutig: Station A; Station B");
+        });
+        int code = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .execute("--from", "A", "--to", "B");
+        assertEquals(1, code);
+        assertEquals("", out.toString());
+        assertTrue(err.toString().contains("Fehler: Station ist nicht eindeutig: Station A; Station B"));
+    }
+
+    @Test
+    void interruptedQueryRestoresInterruptFlagAndReturnsError() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main((origin, destination, limit, departure, via, timeout) -> {
+            throw new InterruptedException("cancelled");
+        });
+        assertFalse(Thread.currentThread().isInterrupted());
+        try {
+            int code = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                    .execute("--from", "A", "--to", "B");
+            assertEquals(1, code);
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertTrue(err.toString().contains("Fehler: Abfrage wurde unterbrochen."));
+            assertEquals("", out.toString());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     @Test
