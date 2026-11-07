@@ -2,16 +2,15 @@
 
 Java-CLI für die BVG-Fahrplanauskunft in Berlin/Brandenburg. Start und Ziel sind
 parametrisierbar; jede Verbindung wird mit ihren Teilstrecken ausgegeben.
-**Kein Browser, kein Playwright, kein Node.js erforderlich.**
 
 ## Voraussetzungen und Build
 
 - Java 17 oder neuer
 - Maven 3.9 oder neuer
-- Internetzugang zur BVG (und beim ersten Build zu Maven Central)
+- Internetzugang
 
 ```sh
-mvn clean package
+./mvnw
 ```
 
 ## Aufruf
@@ -90,7 +89,7 @@ Zwischenhalte.
 ## Tests
 
 ```sh
-mvn test
+/.mvnw test
 ```
 
 Die Tests laufen ohne externe BVG-Zugriffe: Ein lokaler HTTP-Testserver prüft den
