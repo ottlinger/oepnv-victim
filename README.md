@@ -1,6 +1,8 @@
 # oepnv-victim
 
-<img src="docs/logo.svg" alt="oepnv-victim logo: a train with a disruption warning" width="128" height="128">
+<img src="docs/social-logo.svg" alt="oepnv-victim social preview">
+
+
 
 [![GitHub Actions main branch status](https://github.com/ottlinger/oepnv-victim/actions/workflows/maven.yml/badge.svg?branch=main)](https://github.com/ottlinger/oepnv-victim/actions/workflows/maven.yml)
 [![Dependabot enabled](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/ottlinger/oepnv-victim/blob/main/.github/dependabot.yml)
@@ -18,6 +20,8 @@ The [project artwork](docs/README.md) includes editable SVG sources and PNG expo
 of the logo and GitHub social preview.
 
 ## Requirements and build
+
+<img src="docs/logo.svg" alt="oepnv-victim logo: a train with a disruption warning" width="128" height="128">
 
 - [Java](https://java.sun.com) 17 or later
 - [Maven](https://maven.apache.org) 3.9 or later
