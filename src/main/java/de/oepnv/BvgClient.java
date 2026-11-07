@@ -50,8 +50,8 @@ final class BvgClient {
 
     Result search(String origin, String destination, int limit, LocalDateTime departure, String via)
             throws IOException, InterruptedException {
-        // Die Verbindungen selbst sind nicht im SSR-HTML. Die Next.js-Konfiguration
-        // enthält die Endpunkte, deren Antworten auch die UI-Detailansicht versorgen.
+        // Journey data are not included in the server-rendered HTML. The Next.js configuration
+        // provides the endpoints whose responses also populate the UI's journey details panel.
         Map<String, String> initialParams = new LinkedHashMap<>();
         initialParams.put("origin", origin);
         initialParams.put("destination", destination);
@@ -160,7 +160,7 @@ final class BvgClient {
         if (locations.isBlank() || connections.isBlank()) {
             throw new IOException("BVG-HTML enthält keine passenden Suchendpunkte.");
         }
-        // apiPathAutosuggest enthält derzeit '?input='. Werte werden separat kodiert.
+        // apiPathAutosuggest currently includes '?input='. Parameter values are encoded separately.
         URI locationsUri = sameOrigin(base, locations.split("\\?", 2)[0]);
         return new Endpoints(locationsUri, sameOrigin(base, connections));
     }
