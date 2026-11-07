@@ -15,17 +15,23 @@ import java.time.format.ResolverStyle;
 import java.util.concurrent.Callable;
 
 @Command(name = "oepnv-victim", mixinStandardHelpOptions = true, version = "0.1.0",
-        description = "BVG-Verbindungen inklusive Teilstrecken, Gleisen und Verspätungen.")
+        description = "BVG-Verbindungen inklusive Teilstrecken, Gleisen und Verspätungen.",
+        footer = "Stationen müssen eindeutig sein. Bei mehrdeutigen Namen gibt das Tool eine Liste möglicher "
+                + "Stationen aus der BVG-Stationssuche aus; bitte mit einem vollständigen Namen erneut aufrufen.")
 public final class Main implements Callable<Integer> {
-    @Option(names = {"--start", "--from"}, required = true, paramLabel = "BAHNHOF",
-            description = "Startbahnhof, z. B. 'Treuenbrietzen, Bahnhof'.")
-    private String start;
+    @Option(names = "--from", required = true, paramLabel = "STATION",
+            description = "Eindeutige Startstation, z. B. 'Treuenbrietzen, Bahnhof'.")
+    private String origin;
 
-    @Option(names = {"--ziel", "--to"}, required = true, paramLabel = "BAHNHOF",
-            description = "Zielbahnhof, z. B. 'Jüterbog, Bahnhof'.")
+    @Option(names = "--to", required = true, paramLabel = "STATION",
+            description = "Eindeutige Zielstation, z. B. 'Jüterbog, Bahnhof'.")
     private String destination;
 
-    @Option(names = {"--startzeit", "--departure"}, paramLabel = "\"YYYY-MM-DD HH:mm\"",
+    @Option(names = "--via", paramLabel = "STATION",
+            description = "Optionale eindeutige Zwischenstation, z. B. 'S Potsdam Hauptbahnhof'.")
+    private String via;
+
+    @Option(names = "--departure", paramLabel = "\"YYYY-MM-DD HH:mm\"",
             converter = DepartureTimeConverter.class,
             description = "Abfahrtszeit in Berlin, z. B. '2026-11-07 15:22' (Standard: jetzt).")
     private LocalDateTime departure;
@@ -44,19 +50,19 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (start.isBlank() || destination.isBlank() || limit < 1 || timeout < 1) {
+        if (origin.isBlank() || destination.isBlank() || (via != null && via.isBlank()) || limit < 1 || timeout < 1) {
             throw new CommandLine.ParameterException(spec.commandLine(),
-                    "Start und Ziel dürfen nicht leer sein; --limit und --timeout müssen größer als 0 sein.");
+                    "--from, --to und --via dürfen nicht leer sein; --limit und --timeout müssen größer als 0 sein.");
         }
         try {
-            BvgClient.Result result = new BvgClient(Duration.ofSeconds(timeout)).search(start, destination, limit, departure);
+            BvgClient.Result result = new BvgClient(Duration.ofSeconds(timeout)).search(origin, destination, limit, departure, via);
             if (json) {
                 spec.commandLine().getOut().println(BvgClient.JSON.writerWithDefaultPrettyPrinter()
                         .writeValueAsString(result.connections()));
             } else {
                 spec.commandLine().getOut().println("Start: " + result.origin());
                 spec.commandLine().getOut().println("Ziel:  " + result.destination());
-                spec.commandLine().getOut().println("BVG:   " + result.pageUrl());
+                if (result.via() != null) spec.commandLine().getOut().println("Via:   " + result.via());
                 if (result.connections().isEmpty()) {
                     spec.commandLine().getOut().println("Keine Verbindungen gefunden.");
                 }

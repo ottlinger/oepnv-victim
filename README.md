@@ -40,20 +40,53 @@ java -jar target/oepnv-victim.jar \
   --to "Jüterbog, Bahnhof" \
   --departure "2026-11-07 15:22"
 
+# Travel via an intermediate station
+java -jar target/oepnv-victim.jar \
+  --from "Treuenbrietzen, Bahnhof" \
+  --to "Jüterbog, Bahnhof" \
+  --via "S Potsdam Hauptbahnhof" \
+  --departure "2026-11-07 15:22"
+
 # Output all detail fields supplied by BVG as a JSON array
 java -jar target/oepnv-victim.jar --from "Treuenbrietzen, Bahnhof" --to "Jüterbog, Bahnhof" --json
 
 java -jar target/oepnv-victim.jar --help
 ```
 
-`--start` / `--from` and `--ziel` / `--to` are required parameters. If several stops
-match a name, the CLI requires an unambiguous name and lists suggestions; it does
-not simply select the first search result.
+`--from` (origin station) and `--to` (destination station) are required parameters.
+
+**Station names must be unambiguous.** The tool resolves the origin, destination and optional
+intermediate station using the BVG station search. If a name matches several stations and there is no unique exact
+match, it stops and prints a list of possible stations returned by that search to
+stderr (exit code `1`); it does not simply select the first result. Run the command
+again using the full name of the intended station from the list, for example
+`--to "Jüterbog, Bahnhof"` rather than a broad search such as `--to "Jüterbog"`.
+
+`--via` optionally requires a journey through one intermediate station. The same
+unambiguous-name rules apply as for `--from` and `--to`. Without `--via`, journeys
+are searched as before.
+
+The BVG endpoint does not honour the tested via parameter, so the tool plans two
+sections: `from → via` and `via → to`. For each of the first N journeys to the
+intermediate station, it searches for an onward journey from the arrival time,
+including any reported arrival delay, and selects the first result departing no
+earlier than that arrival. Searches crossing midnight use the next day's date.
+The output combines both sections and includes waiting time in the total duration;
+the resolved intermediate station is also displayed. No additional minimum transfer
+time or stopover duration is imposed, and this is not a globally optimised
+end-to-end journey search. Allow sufficient time for transfers and check live
+service information. If no onward journey is available on the returned page, that
+candidate is omitted. Via searches make an additional station lookup and up to N
+additional journey requests.
+
+For `--json`, combined journeys contain `via`, a combined `summary` and `legs`,
+and a `viaConnections` array preserving both original BVG journey objects and all
+their fields. No synthetic BVG journey ID is assigned.
 
 `--limit` restricts the output to at most N journeys from the first page of results
 (default: 5). No further pages are fetched.
 `--timeout` sets the timeout for each HTTP request in seconds (default: 30).
-`--startzeit` / `--departure` optionally sets the departure date and time in the
+`--departure` optionally sets the departure date and time in the
 strict format `YYYY-MM-DD HH:mm`, for example `"2026-11-07 15:22"`. Quote the value
 because it contains a space. It is interpreted as local time in Berlin
 (`Europe/Berlin`), not the time zone of the computer running the CLI. Invalid dates,
@@ -82,8 +115,7 @@ redirected output remains plain text by default. Styling can be forced with
 `-Dpicocli.ansi=true` or disabled with `-Dpicocli.ansi=false` (place the option
 before `-jar`). The plain-text example above does not show terminal styling.
 
-The text output also includes the parameterised BVG URL. Notices and disruptions
-are displayed where available. `--json` outputs only the selected journey objects,
+Notices and disruptions are displayed where available. `--json` outputs only the selected journey objects,
 including every field supplied by BVG, without terminal styling.
 
 Exit codes: `0` for a successful query (including an empty result list), `1` for a
@@ -123,4 +155,4 @@ The tests run without accessing external BVG services: a local HTTP test server
 checks the workflow from HTML parsing to the details query. Further tests cover
 name resolution, UTF-8 and URL parameters, error cases, journey legs, platforms,
 delays, walking transfers, journeys crossing midnight, notices, terminal styling,
-configured departure times, and CLI validation.
+configured departure times, intermediate stations and onward journeys, and CLI validation.

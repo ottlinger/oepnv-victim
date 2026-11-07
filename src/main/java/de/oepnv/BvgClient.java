@@ -45,6 +45,11 @@ final class BvgClient {
 
     Result search(String origin, String destination, int limit, LocalDateTime departure)
             throws IOException, InterruptedException {
+        return search(origin, destination, limit, departure, null);
+    }
+
+    Result search(String origin, String destination, int limit, LocalDateTime departure, String via)
+            throws IOException, InterruptedException {
         // Die Verbindungen selbst sind nicht im SSR-HTML. Die Next.js-Konfiguration
         // enthält die Endpunkte, deren Antworten auch die UI-Detailansicht versorgen.
         Map<String, String> initialParams = new LinkedHashMap<>();
@@ -55,6 +60,7 @@ final class BvgClient {
         Endpoints endpoints = parseEndpoints(get(initialPage, "text/html"), base);
         Station from = resolveStation(endpoints.locations(), origin);
         Station to = resolveStation(endpoints.locations(), destination);
+        Station intermediate = via == null ? null : resolveStation(endpoints.locations(), via);
 
         Map<String, String> pageParams = new LinkedHashMap<>();
         pageParams.put("origin", from.name());
@@ -69,11 +75,36 @@ final class BvgClient {
             pageParams.put(product, "on");
         }
         URI pageUrl = query(base.resolve(PAGE), pageParams);
+        List<JsonNode> selected = searchConnections(endpoints.connections(), from,
+                intermediate == null ? to : intermediate, limit, departure);
+        if (intermediate != null) {
+            List<JsonNode> combined = new ArrayList<>();
+            for (JsonNode first : selected) {
+                LocalDateTime ready = ViaJourney.effectiveTime(first.path("summary").path("arrival"));
+                // The endpoint accepts minutes only: round up rather than request a departure before arrival.
+                LocalDateTime onwardTime = ready.getSecond() == 0 ? ready : ready.plusMinutes(1).withSecond(0);
+                List<JsonNode> onward = searchConnections(endpoints.connections(), intermediate, to,
+                        Integer.MAX_VALUE, onwardTime);
+                for (JsonNode second : onward) {
+                    if (!ViaJourney.effectiveTime(second.path("summary").path("departure")).isBefore(ready)) {
+                        combined.add(ViaJourney.combine(first, second, intermediate.name()));
+                        break;
+                    }
+                }
+            }
+            selected = combined;
+        }
+        return new Result(from.name(), to.name(), intermediate == null ? null : intermediate.name(),
+                pageUrl, List.copyOf(selected));
+    }
+
+    private List<JsonNode> searchConnections(URI endpoint, Station from, Station to, int limit,
+                                            LocalDateTime departure) throws IOException, InterruptedException {
         Map<String, String> connectionParams = new LinkedHashMap<>(Map.of(
                 "language", "de", "SID", from.id(), "ZID", to.id(),
                 "products", "127", "realtime", "true"));
         departureParams(connectionParams, departure, "depart");
-        URI connectionsUrl = query(endpoints.connections(), connectionParams);
+        URI connectionsUrl = query(endpoint, connectionParams);
         JsonNode response = JSON.readTree(get(connectionsUrl, "application/json"));
         JsonNode connections = response.path("connections");
         if (!connections.isArray()) {
@@ -87,7 +118,7 @@ final class BvgClient {
             }
             selected.add(connection);
         }
-        return new Result(from.name(), to.name(), pageUrl, List.copyOf(selected));
+        return List.copyOf(selected);
     }
 
     private static void departureParams(Map<String, String> params, LocalDateTime departure, String defaultSelection) {
@@ -169,5 +200,5 @@ final class BvgClient {
 
     record Station(String name, String id) { }
     record Endpoints(URI locations, URI connections) { }
-    record Result(String origin, String destination, URI pageUrl, List<JsonNode> connections) { }
+    record Result(String origin, String destination, String via, URI pageUrl, List<JsonNode> connections) { }
 }

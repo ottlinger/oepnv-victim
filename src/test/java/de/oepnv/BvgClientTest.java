@@ -22,11 +22,15 @@ class BvgClientTest {
     private URI base;
     private final List<String> requests = new ArrayList<>();
     private String response;
+    private String onwardResponse;
+    private String viaLocations;
     private int status;
 
     @BeforeEach
     void setUp() throws IOException {
         response = fixture();
+        onwardResponse = "{\"connections\":[]}";
+        viaLocations = "[{\"type\":\"HST\",\"name\":\"S Potsdam Hauptbahnhof\",\"id\":\"via-id\"}]";
         status = 200;
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
@@ -41,8 +45,9 @@ class BvgClientTest {
                 boolean from = uri.contains("Treuenbrietzen");
                 body = "[{\"type\":\"HST\",\"name\":\"" + (from ? "Treuenbrietzen, Bahnhof" : "Jüterbog, Bahnhof")
                         + "\",\"id\":\"" + (from ? "A=1@O=Treuenbrietzen, Bahnhof@" : "A=1@O=Jüterbog, Bahnhof@") + "\"}]";
+                if (uri.contains("input=Potsdam") || uri.contains("input=S Potsdam")) body = viaLocations;
             } else {
-                body = response;
+                body = uri.contains("SID=via-id") ? onwardResponse : response;
                 code = status;
             }
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
@@ -67,6 +72,8 @@ class BvgClientTest {
         assertEquals(1, result.connections().size());
         assertEquals("RB33", result.connections().get(0).path("legs").get(0).path("service").path("name").asText());
         assertEquals("Jüterbog, Bahnhof", result.destination());
+        assertNull(result.via());
+        assertEquals(4, requests.size());
         assertTrue(requests.get(0).startsWith("/de/verbindungen/fahrplanauskunft?"));
         assertTrue(requests.stream().anyMatch(r -> r.contains("input=Jüterbog, Bahnhof")));
         assertTrue(requests.stream().anyMatch(r -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
@@ -98,6 +105,62 @@ class BvgClientTest {
             assertFalse(uri.contains("timeSel=now"), uri);
         }
         assertEquals(1, result.connections().size());
+    }
+
+    @Test
+    void plansViaWithResolvedStationAndArrivalTimeAcrossMidnight() throws Exception {
+        response = "{\"connections\":[" + journey("Treuenbrietzen, Bahnhof", "S Potsdam Hauptbahnhof",
+                "2026-11-07T23:55:00", "2026-11-08T00:05:00", "PT2M30S") + "]}";
+        onwardResponse = "{\"connections\":["
+                + journey("S Potsdam Hauptbahnhof", "Jüterbog, Bahnhof", "2026-11-08T00:07:00", "2026-11-08T00:25:00", "") + ","
+                + journey("S Potsdam Hauptbahnhof", "Jüterbog, Bahnhof", "2026-11-08T00:10:00", "2026-11-08T00:30:00", "") + "]}";
+        var result = new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
+                LocalDateTime.of(2026, 11, 7, 23, 50), "Potsdam");
+        assertEquals("S Potsdam Hauptbahnhof", result.via());
+        assertEquals(1, result.connections().size());
+        assertCombinedViaJourney(result.connections().get(0));
+        assertTrue(requests.stream().anyMatch(r -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
+                && r.contains("ZID=via-id") && r.contains("time=23:50")));
+        assertTrue(requests.stream().anyMatch(r -> r.contains("SID=via-id")
+                && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("date=2026-11-08")
+                && r.contains("time=00:08")));
+        assertEquals(6, requests.size());
+    }
+
+    private static void assertCombinedViaJourney(com.fasterxml.jackson.databind.JsonNode combined) {
+        assertEquals(2, combined.path("legs").size());
+        assertEquals("S Potsdam Hauptbahnhof", combined.path("legs").get(0).path("arrivalStop").path("name").asText());
+        assertEquals("00:10:00", combined.path("legs").get(1).path("departure").path("time").asText());
+        assertEquals("PT35M", combined.path("summary").path("totalDuration").asText());
+        assertEquals(2, combined.path("viaConnections").size());
+        assertTrue(ConnectionFormatter.format(1, combined).contains("35 Min."));
+    }
+
+    @Test
+    void viaWithNoOnwardJourneyReturnsNoResults() throws Exception {
+        response = "{\"connections\":[" + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof",
+                "2026-11-07T15:22:00", "2026-11-07T15:40:00", "") + "]}";
+        assertTrue(new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam").connections().isEmpty());
+    }
+
+    @Test
+    void ambiguousViaListsStationsBeforePlanningAnyJourney() {
+        viaLocations = "[{\"type\":\"HST\",\"name\":\"Potsdam A\",\"id\":\"a\"},"
+                + "{\"type\":\"HST\",\"name\":\"Potsdam B\",\"id\":\"b\"}]";
+        IOException error = assertThrows(IOException.class, () -> new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam"));
+        assertTrue(error.getMessage().contains("Potsdam A; Potsdam B"));
+        assertFalse(requests.stream().anyMatch(r -> r.startsWith("/connections?")));
+    }
+
+    private static String journey(String from, String to, String departure, String arrival, String delay) {
+        String departureEvent = "{\"date\":\"" + departure.substring(0, 10) + "\",\"time\":\"" + departure.substring(11) + "\"}";
+        String arrivalEvent = "{\"date\":\"" + arrival.substring(0, 10) + "\",\"time\":\"" + arrival.substring(11)
+                + "\",\"delay\":\"" + delay + "\"}";
+        return "{\"summary\":{\"departure\":" + departureEvent + ",\"arrival\":" + arrivalEvent + "},"
+                + "\"legs\":[{\"departure\":" + departureEvent + ",\"arrival\":" + arrivalEvent
+                + ",\"departureStop\":{\"name\":\"" + from + "\"},\"arrivalStop\":{\"name\":\"" + to + "\"}}]}";
     }
 
     @Test
@@ -145,7 +208,11 @@ class BvgClientTest {
                  {"type":"HST","name":"Jüterbog, Bahnhof","id":"correct"}]
                 """);
         assertEquals("correct", BvgClient.selectStation(locations, "jüterbog, bahnhof").id());
-        assertThrows(IOException.class, () -> BvgClient.selectStation(locations, "Jüterbog"));
+        IOException ambiguity = assertThrows(IOException.class,
+                () -> BvgClient.selectStation(locations, "Jüterbog"));
+        assertTrue(ambiguity.getMessage().contains("nicht eindeutig"));
+        assertTrue(ambiguity.getMessage().contains("Jüterbog, Bahnhof Süd; Jüterbog, Bahnhof"));
+        assertFalse(ambiguity.getMessage().contains("poi"));
         assertThrows(IOException.class, () -> BvgClient.selectStation(BvgClient.JSON.readTree("[]"), "unbekannt"));
     }
 
