@@ -1,6 +1,6 @@
 # oepnv-victim
 
-<img src="docs/social-logo.svg" alt="oepnv-victim social preview">
+<img src="docs/social-preview.svg" alt="oepnv-victim social preview">
 
 
 
