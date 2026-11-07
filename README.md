@@ -4,14 +4,16 @@
 [![Dependabot enabled](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/ottlinger/oepnv-victim/blob/main/.github/dependabot.yml)
 [![codecov](https://codecov.io/gh/ottlinger/oepnv-victim/branch/main/graph/badge.svg)](https://codecov.io/gh/ottlinger/oepnv-victim)
 
+As a vicitim of German public transport you need an easy-to-use tool to get connections.
+
 A Java command-line application for [BVG](https://www.bvg) journey planning in Berlin and Brandenburg.
 The origin and destination are configurable; each journey is displayed with its
 individual legs.
 
 ## Requirements and build
 
-- Java 17 or later
-- Maven 3.9 or later
+- [Java](https://java.sun.com) 17 or later
+- [Maven](https://maven.apache.org) 3.9 or later
 - Internet access
 
 ```sh
