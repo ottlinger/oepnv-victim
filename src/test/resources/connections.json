@@ -1,0 +1,44 @@
+{
+  "connections": [
+    {
+      "date": "2026-11-07",
+      "summary": {
+        "departure": {"date": "2026-11-07", "time": "12:29:00", "delay": "PT5M"},
+        "arrival": {"date": "2026-11-07", "time": "12:47:00", "delay": "PT0S"},
+        "totalDuration": "PT18M",
+        "hasWarnings": true,
+        "services": [{"name": "RB33", "lineTypeName": "regionalTraffic"}]
+      },
+      "legs": [
+        {
+          "departure": {"date": "2026-11-07", "time": "12:29:00", "delay": "PT5M"},
+          "arrival": {"date": "2026-11-07", "time": "12:47:00", "delay": "PT0S"},
+          "service": {"name": "RB33", "direction": "Jüterbog, Bahnhof"},
+          "departureStop": {"name": "Treuenbrietzen, Bahnhof", "track": "Gl. 2"},
+          "arrivalStop": {"name": "Jüterbog, Bahnhof", "track": "Gl. 3"},
+          "duration": "PT18M",
+          "stopCount": 3,
+          "warnings": [{"text": "<p>Bitte <b>Hinweis</b> beachten.</p>"}]
+        }
+      ],
+      "id": "example-1"
+    },
+    {
+      "summary": {
+        "departure": {"date": "2026-11-07", "time": "23:55:00"},
+        "arrival": {"date": "2026-11-08", "time": "00:05:00"},
+        "totalDuration": "PT10M"
+      },
+      "legs": [
+        {
+          "departure": {"date": "2026-11-07", "time": "23:55:00"},
+          "arrival": {"date": "2026-11-08", "time": "00:05:00"},
+          "departureStop": {"name": "Start"},
+          "arrivalStop": {"name": "Ziel"},
+          "duration": "PT10M"
+        }
+      ],
+      "id": "example-2"
+    }
+  ]
+}
