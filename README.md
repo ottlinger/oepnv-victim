@@ -4,7 +4,7 @@
 [![Dependabot enabled](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/ottlinger/oepnv-victim/blob/main/.github/dependabot.yml)
 [![codecov](https://codecov.io/gh/ottlinger/oepnv-victim/branch/main/graph/badge.svg)](https://codecov.io/gh/ottlinger/oepnv-victim)
 
-A Java command-line application for BVG journey planning in Berlin and Brandenburg.
+A Java command-line application for [BVG](https://www.bvg) journey planning in Berlin and Brandenburg.
 The origin and destination are configurable; each journey is displayed with its
 individual legs.
 
