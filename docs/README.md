@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
 # Project artwork
 
 Original, editable vector artwork for **oepnv-victim**, with matching PNG exports.

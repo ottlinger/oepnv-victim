@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
 package de.oepnv;
 
 import com.fasterxml.jackson.databind.JsonNode;

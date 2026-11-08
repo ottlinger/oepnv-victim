@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<rat-config>
+  <families>
+    <family id="AGPL" name="GNU Affero General Public License" />
+  </families>
+  <licenses>
+    <license family="AGPL" id="AGPL-3.0-only" name="GNU Affero General Public License, version 3">
+      <any>
+        <spdx name="AGPL-3.0-only" />
+        <text>GNU AFFERO GENERAL PUBLIC LICENSE</text>
+      </any>
+    </license>
+  </licenses>
+  <approved>
+    <family license_ref="AGPL" />
+  </approved>
+</rat-config>

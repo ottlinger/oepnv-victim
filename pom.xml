@@ -1,9 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>de.oepnv</groupId>
   <artifactId>oepnv-victim</artifactId>
   <version>0.1.0-SNAPSHOT</version>
+  <licenses>
+    <license>
+      <name>GNU Affero General Public License, version 3</name>
+      <url>https://www.gnu.org/licenses/agpl-3.0.html</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
   <properties>
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -35,6 +43,29 @@
     <defaultGoal>clean install</defaultGoal>
     <finalName>oepnv-victim</finalName>
     <plugins>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <version>0.18</version>
+        <configuration>
+          <config>${project.basedir}/.mvn/rat-config.xml</config>
+          <inputExcludeStds>
+            <exclude>ALL</exclude>
+          </inputExcludeStds>
+          <inputExcludes>
+            <exclude>src/test/resources/connections.json</exclude>
+          </inputExcludes>
+        </configuration>
+        <executions>
+          <execution>
+            <id>license-check</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>

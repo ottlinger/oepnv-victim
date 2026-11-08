@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
 # oepnv-victim
 
 <img src="docs/social-preview.svg" alt="oepnv-victim social preview">
