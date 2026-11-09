@@ -61,6 +61,7 @@ class MainTest {
         assertTrue(out.toString().contains("Via:   S Potsdam Hauptbahnhof"));
         assertTrue(out.toString().contains("Verbindung 1:"));
         assertTrue(out.toString().contains("Verbindung 2:"));
+        assertTrue(out.toString().contains(" | Gesamt: 18 Min."));
         assertTrue(out.toString().contains(CommandLine.Help.Ansi.ON.string("@|bold 2026-11-07 12:29|@")));
         assertFalse(out.toString().contains("https://"));
         assertFalse(out.toString().contains("BVG:"));
@@ -175,6 +176,24 @@ class MainTest {
     }
 
     @Test
+    void acceptsOneAndTwoDigitHoursForBothTimeOptions() {
+        for (final String option : List.of("--departure", "--arrival")) {
+            for (final String time : List.of("0:00", "00:00", "9:00", "09:00", "9:15", "09:15", "23:59")) {
+                final LocalDateTime expected = LocalDateTime.of(2026, 11, 7,
+                        Integer.parseInt(time.split(":")[0]), Integer.parseInt(time.split(":")[1]));
+                final Main main = new Main((final var origin, final var destination, final var limit,
+                                            final var departure, final var arrival, final var via, final var timeout) -> {
+                    assertEquals(expected, option.equals("--departure") ? departure : arrival);
+                    assertNull(option.equals("--departure") ? arrival : departure);
+                    return new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of());
+                });
+                assertEquals(0, new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
+                        .execute("--from", "A", "--to", "B", option, "2026-11-07 " + time), option + " " + time);
+            }
+        }
+    }
+
+    @Test
     void rejectsConflictingTimesWithoutNetwork() {
         StringWriter err = new StringWriter();
         Main main = new Main((final var origin, final var destination, final var limit,
@@ -198,7 +217,8 @@ class MainTest {
     void rejectsInvalidDepartureTimesWithoutNetwork() {
         for (String value : new String[]{"", "2026-11-07", "2026-11-07T15:22", "2026-11-07 15:22:00",
                 "2026-02-29 15:22", "2026-11-31 15:22", "2026-11-07 24:00", "2026-11-07 15:60",
-                "2026-1-07 15:22", " 2026-11-07 15:22", "not a date"}) {
+                "2026-1-07 15:22", " 2026-11-07 15:22", "2026-11-07 9:0", "2026-11-07 009:00",
+                "2026-11-07 9:60", "2026-11-07 9:00 Uhr", "not a date"}) {
             for (String option : List.of("--departure", "--arrival")) {
                 StringWriter err = new StringWriter();
                 int code = new CommandLine(new Main()).setErr(new PrintWriter(err))

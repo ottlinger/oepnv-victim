@@ -5,8 +5,11 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import picocli.CommandLine;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -125,6 +128,25 @@ class BvgClientTest {
             assertTrue(uri.contains("time=16:00"), uri);
         }
         assertEquals(1, result.connections().size());
+    }
+
+    @Test
+    void cliNormalizesSingleDigitHoursForHttpRequests() {
+        for (final String option : List.of("--departure", "--arrival")) {
+            requests.clear();
+            final Main main = new Main((final var origin, final var destination, final var limit,
+                                        final var departure, final var arrival, final var via, final var timeout) ->
+                    new BvgClient(base, timeout).search(origin, destination, limit, departure, arrival, via));
+            final StringWriter err = new StringWriter();
+            assertEquals(0, new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
+                    .setErr(new PrintWriter(err)).execute("--from", "Treuenbrietzen", "--to", "Jüterbog",
+                            option, "2026-11-07 9:00"), err.toString());
+            assertEquals(4, requests.size());
+            for (final String request : List.of(requests.get(0), requests.get(3))) {
+                assertTrue(request.contains("time=09:00"), request);
+                assertTrue(request.contains("timeSel=" + (option.equals("--arrival") ? "arrive" : "depart")), request);
+            }
+        }
     }
 
     @Test

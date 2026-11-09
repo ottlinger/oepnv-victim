@@ -19,7 +19,7 @@ final class ConnectionFormatter {
         JsonNode summary = connection.path("summary");
         StringBuilder out = new StringBuilder("\nVerbindung " + index + ": ");
         out.append(time(summary.path("departure"), ansi)).append(" → ").append(time(summary.path("arrival")))
-                .append(" | ").append(duration(summary.path("totalDuration").asText())).append('\n');
+                .append(" | Gesamt: ").append(duration(summary.path("totalDuration").asText())).append('\n');
         int legIndex = 1;
         for (JsonNode leg : connection.path("legs")) {
             JsonNode service = leg.path("service");

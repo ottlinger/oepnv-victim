@@ -121,8 +121,9 @@ their fields. No synthetic BVG journey ID is assigned.
 `--timeout` sets the timeout for each HTTP request in seconds (default: 30).
 `--departure` optionally sets the departure date and time; `--arrival` instead
 sets the requested arrival date and time at the destination. Both use the
-strict format `YYYY-MM-DD HH:mm`, for example `"2026-11-07 15:22"`. Quote the value
-because it contains a space. It is interpreted as local time in Berlin
+format `YYYY-MM-DD H:mm` or `YYYY-MM-DD HH:mm`, for example
+`"2026-11-07 9:00"` or `"2026-11-07 09:15"`. Hours may have one or two digits;
+minutes must have exactly two digits. Quote the value because it contains a space. It is interpreted as local time in Berlin
 (`Europe/Berlin`), not the time zone of the computer running the CLI. Invalid dates,
 times and formats are rejected with exit code `2` before any network request.
 `--departure` and `--arrival` are mutually exclusive; specifying both is rejected
@@ -136,7 +137,7 @@ as evidence that a service is on time.
 Example journey (times and platforms vary; CLI output remains in German):
 
 ```text
-Verbindung 1: 2026-11-07 12:29 (+0 Min.) → 2026-11-07 12:47 (+0 Min.) | 18 Min.
+Verbindung 1: 2026-11-07 12:29 (+0 Min.) → 2026-11-07 12:47 (+0 Min.) | Gesamt: 18 Min.
   1. RB33 Richtung Jüterbog, Bahnhof
      2026-11-07 12:29 (+0 Min.)  Treuenbrietzen, Bahnhof (Gl. 2)
      2026-11-07 12:47 (+0 Min.)  Jüterbog, Bahnhof (Gl. 3)

@@ -54,12 +54,12 @@ public final class Main implements Callable<Integer> {
 
     @Option(names = "--departure", paramLabel = "\"YYYY-MM-DD HH:mm\"",
             converter = DepartureTimeConverter.class,
-            description = "Abfahrtszeit in Berlin, z. B. '2026-11-07 15:22' (Standard: jetzt).")
+            description = "Abfahrtszeit in Berlin, z. B. '2026-11-07 9:00' (Stunde ein- oder zweistellig; Standard: jetzt).")
     private LocalDateTime departure;
 
     @Option(names = "--arrival", paramLabel = "\"YYYY-MM-DD HH:mm\"",
             converter = DepartureTimeConverter.class,
-            description = "Ankunftszeit in Berlin, z. B. '2026-11-07 16:00' (nicht mit --departure kombinierbar).")
+            description = "Ankunftszeit in Berlin, z. B. '2026-11-07 9:00' (Stunde ein- oder zweistellig; nicht mit --departure kombinierbar).")
     private LocalDateTime arrival;
 
     @Option(names = "--limit", defaultValue = "5", description = "Maximale Anzahl aus der ersten Ergebnisseite (Standard: 5).")
@@ -114,18 +114,18 @@ public final class Main implements Callable<Integer> {
     }
 
     public static final class DepartureTimeConverter implements CommandLine.ITypeConverter<LocalDateTime> {
-        private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
+        private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("uuuu-MM-dd H:mm")
                 .withResolverStyle(ResolverStyle.STRICT);
 
         @Override
         public LocalDateTime convert(final String value) {
             try {
-                if (!value.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}")) {
-                    throw new CommandLine.TypeConversionException("Format: YYYY-MM-DD HH:mm, z. B. 2026-11-07 15:22.");
+                if (!value.matches("\\d{4}-\\d{2}-\\d{2} \\d{1,2}:\\d{2}")) {
+                    throw new CommandLine.TypeConversionException("Format: YYYY-MM-DD HH:mm (Stunde ein- oder zweistellig), z. B. 2026-11-07 9:00.");
                 }
                 return LocalDateTime.parse(value, FORMAT);
             } catch (final DateTimeParseException e) {
-                throw new CommandLine.TypeConversionException("Ungültige Zeit; Format: YYYY-MM-DD HH:mm.");
+                throw new CommandLine.TypeConversionException("Ungültige Zeit; Format: YYYY-MM-DD HH:mm (Stunde ein- oder zweistellig).");
             }
         }
     }

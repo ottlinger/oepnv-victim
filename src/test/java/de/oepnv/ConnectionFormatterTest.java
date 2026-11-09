@@ -18,7 +18,8 @@ class ConnectionFormatterTest {
         assertTrue(text.contains("Treuenbrietzen, Bahnhof (Gl. 2)"));
         assertTrue(text.contains("Jüterbog, Bahnhof (Gl. 3)"));
         assertTrue(text.contains("12:29 (+5 Min.)"));
-        assertTrue(text.contains("18 Min."));
+        assertTrue(text.contains(" | Gesamt: 18 Min.\n"));
+        assertTrue(text.contains("     Dauer: 18 Min."));
         assertTrue(text.contains("Bitte Hinweis beachten."));
         assertTrue(text.contains("Störungen/Hinweise"));
         assertFalse(text.contains("<b>"));
