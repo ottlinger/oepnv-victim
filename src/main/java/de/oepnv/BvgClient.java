@@ -52,12 +52,21 @@ final class BvgClient {
     Result search(final String origin, final String destination, final int limit,
                   final LocalDateTime departure, final String via)
             throws IOException, InterruptedException {
+        return search(origin, destination, limit, departure, null, via);
+    }
+
+    Result search(final String origin, final String destination, final int limit,
+                  final LocalDateTime departure, final LocalDateTime arrival, final String via)
+            throws IOException, InterruptedException {
+        if (departure != null && arrival != null) {
+            throw new IllegalArgumentException("--departure und --arrival dürfen nicht gemeinsam angegeben werden.");
+        }
         // Journey data are not included in the server-rendered HTML. The Next.js configuration
         // provides the endpoints whose responses also populate the UI's journey details panel.
         Map<String, String> initialParams = new LinkedHashMap<>();
         initialParams.put("origin", origin);
         initialParams.put("destination", destination);
-        departureParams(initialParams, departure, "now");
+        timeParams(initialParams, departure, arrival, "now");
         URI initialPage = query(base.resolve(PAGE), initialParams);
         Endpoints endpoints = parseEndpoints(get(initialPage, "text/html"), base);
         Station from = resolveStation(endpoints.locations(), origin);
@@ -71,22 +80,25 @@ final class BvgClient {
         pageParams.put("originName", from.name());
         pageParams.put("destinationId", to.id());
         pageParams.put("destinationName", to.name());
-        departureParams(pageParams, departure, "now");
+        timeParams(pageParams, departure, arrival, "now");
         for (String product : List.of("sbahn", "subway", "bus", "tram", "ferry",
                 "longDistanceTraffic", "regionalTraffic")) {
             pageParams.put(product, "on");
         }
         URI pageUrl = query(base.resolve(PAGE), pageParams);
-        List<JsonNode> selected = searchConnections(endpoints.connections(), from,
-                intermediate == null ? to : intermediate, limit, departure);
-        if (intermediate != null) {
+        List<JsonNode> selected = searchConnections(endpoints.connections(),
+                intermediate != null && arrival != null ? intermediate : from,
+                intermediate == null || arrival != null ? to : intermediate, limit, departure, arrival);
+        if (intermediate != null && arrival != null) {
+            selected = precedingJourneys(endpoints.connections(), from, intermediate, selected);
+        } else if (intermediate != null) {
             List<JsonNode> combined = new ArrayList<>();
             for (JsonNode first : selected) {
                 LocalDateTime ready = ViaJourney.effectiveTime(first.path("summary").path("arrival"));
                 // The endpoint accepts minutes only: round up rather than request a departure before arrival.
                 LocalDateTime onwardTime = ready.getSecond() == 0 ? ready : ready.plusMinutes(1).withSecond(0);
                 List<JsonNode> onward = searchConnections(endpoints.connections(), intermediate, to,
-                        Integer.MAX_VALUE, onwardTime);
+                        Integer.MAX_VALUE, onwardTime, null);
                 for (JsonNode second : onward) {
                     if (!ViaJourney.effectiveTime(second.path("summary").path("departure")).isBefore(ready)) {
                         combined.add(ViaJourney.combine(first, second, intermediate.name()));
@@ -100,12 +112,33 @@ final class BvgClient {
                 pageUrl, List.copyOf(selected));
     }
 
+    private List<JsonNode> precedingJourneys(final URI endpoint, final Station from, final Station intermediate,
+                                             final List<JsonNode> onward) throws IOException, InterruptedException {
+        List<JsonNode> combined = new ArrayList<>();
+        for (JsonNode second : onward) {
+            LocalDateTime latest = ViaJourney.effectiveTime(second.path("summary").path("departure"));
+            List<JsonNode> preceding = searchConnections(endpoint, from, intermediate,
+                    Integer.MAX_VALUE, null, latest.withSecond(0).withNano(0));
+            JsonNode best = null;
+            for (JsonNode first : preceding) {
+                LocalDateTime ready = ViaJourney.effectiveTime(first.path("summary").path("arrival"));
+                if (!ready.isAfter(latest) && (best == null || ready.isAfter(
+                        ViaJourney.effectiveTime(best.path("summary").path("arrival"))))) {
+                    best = first;
+                }
+            }
+            if (best != null) combined.add(ViaJourney.combine(best, second, intermediate.name()));
+        }
+        return List.copyOf(combined);
+    }
+
     private List<JsonNode> searchConnections(final URI endpoint, final Station from, final Station to,
-                                            final int limit, final LocalDateTime departure) throws IOException, InterruptedException {
+                                            final int limit, final LocalDateTime departure,
+                                            final LocalDateTime arrival) throws IOException, InterruptedException {
         Map<String, String> connectionParams = new LinkedHashMap<>(Map.of(
                 "language", "de", "SID", from.id(), "ZID", to.id(),
                 "products", "127", "realtime", "true"));
-        departureParams(connectionParams, departure, "depart");
+        timeParams(connectionParams, departure, arrival, "depart");
         URI connectionsUrl = query(endpoint, connectionParams);
         JsonNode response = JSON.readTree(get(connectionsUrl, "application/json"));
         JsonNode connections = response.path("connections");
@@ -123,12 +156,13 @@ final class BvgClient {
         return List.copyOf(selected);
     }
 
-    private static void departureParams(final Map<String, String> params, final LocalDateTime departure,
-                                        final String defaultSelection) {
-        params.put("timeSel", departure == null ? defaultSelection : "depart");
-        if (departure != null) {
-            params.put("date", departure.toLocalDate().toString());
-            params.put("time", departure.format(DateTimeFormatter.ofPattern("HH:mm")));
+    private static void timeParams(final Map<String, String> params, final LocalDateTime departure,
+                                   final LocalDateTime arrival, final String defaultSelection) {
+        LocalDateTime time = arrival == null ? departure : arrival;
+        params.put("timeSel", arrival != null ? "arrive" : departure == null ? defaultSelection : "depart");
+        if (time != null) {
+            params.put("date", time.toLocalDate().toString());
+            params.put("time", time.format(DateTimeFormatter.ofPattern("HH:mm")));
         }
     }
 

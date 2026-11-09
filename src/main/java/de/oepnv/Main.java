@@ -25,8 +25,8 @@ public final class Main implements Callable<Integer> {
 
     public Main() {
         this((final var origin, final var destination, final var limit,
-              final var departure, final var via, final var timeout) ->
-                new BvgClient(timeout).search(origin, destination, limit, departure, via));
+              final var departure, final var arrival, final var via, final var timeout) ->
+                new BvgClient(timeout).search(origin, destination, limit, departure, arrival, via));
     }
 
     Main(final JourneySearch search) {
@@ -36,7 +36,8 @@ public final class Main implements Callable<Integer> {
     @FunctionalInterface
     interface JourneySearch {
         BvgClient.Result search(final String origin, final String destination, final int limit,
-                                final LocalDateTime departure, final String via, final Duration timeout) throws IOException, InterruptedException;
+                                final LocalDateTime departure, final LocalDateTime arrival,
+                                final String via, final Duration timeout) throws IOException, InterruptedException;
     }
 
     @Option(names = "--from", required = true, paramLabel = "STATION",
@@ -56,6 +57,11 @@ public final class Main implements Callable<Integer> {
             description = "Abfahrtszeit in Berlin, z. B. '2026-11-07 15:22' (Standard: jetzt).")
     private LocalDateTime departure;
 
+    @Option(names = "--arrival", paramLabel = "\"YYYY-MM-DD HH:mm\"",
+            converter = DepartureTimeConverter.class,
+            description = "Ankunftszeit in Berlin, z. B. '2026-11-07 16:00' (nicht mit --departure kombinierbar).")
+    private LocalDateTime arrival;
+
     @Option(names = "--limit", defaultValue = "5", description = "Maximale Anzahl aus der ersten Ergebnisseite (Standard: 5).")
     private int limit;
 
@@ -74,8 +80,12 @@ public final class Main implements Callable<Integer> {
             throw new CommandLine.ParameterException(spec.commandLine(),
                     "--from, --to und --via dürfen nicht leer sein; --limit und --timeout müssen größer als 0 sein.");
         }
+        if (departure != null && arrival != null) {
+            throw new CommandLine.ParameterException(spec.commandLine(),
+                    "--departure und --arrival dürfen nicht gemeinsam angegeben werden.");
+        }
         try {
-            BvgClient.Result result = search.search(origin, destination, limit, departure, via, Duration.ofSeconds(timeout));
+            BvgClient.Result result = search.search(origin, destination, limit, departure, arrival, via, Duration.ofSeconds(timeout));
             if (json) {
                 spec.commandLine().getOut().println(BvgClient.JSON.writerWithDefaultPrettyPrinter()
                         .writeValueAsString(result.connections()));
@@ -115,7 +125,7 @@ public final class Main implements Callable<Integer> {
                 }
                 return LocalDateTime.parse(value, FORMAT);
             } catch (final DateTimeParseException e) {
-                throw new CommandLine.TypeConversionException("Ungültige Abfahrtszeit; Format: YYYY-MM-DD HH:mm.");
+                throw new CommandLine.TypeConversionException("Ungültige Zeit; Format: YYYY-MM-DD HH:mm.");
             }
         }
     }

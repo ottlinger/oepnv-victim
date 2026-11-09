@@ -52,12 +52,25 @@ java -jar target/oepnv-victim.jar \
   --to "Jüterbog, Bahnhof" \
   --departure "2026-11-07 15:22"
 
+# Search for journeys arriving on 7 November 2026 at 16:00 (Berlin local time)
+java -jar target/oepnv-victim.jar \
+  --from "Treuenbrietzen, Bahnhof" \
+  --to "Jüterbog, Bahnhof" \
+  --arrival "2026-11-07 16:00"
+
 # Travel via an intermediate station
 java -jar target/oepnv-victim.jar \
   --from "Treuenbrietzen, Bahnhof" \
   --to "Jüterbog, Bahnhof" \
   --via "S Potsdam Hauptbahnhof" \
   --departure "2026-11-07 15:22"
+
+# Travel via an intermediate station with a requested arrival time
+java -jar target/oepnv-victim.jar \
+  --from "Treuenbrietzen, Bahnhof" \
+  --to "Jüterbog, Bahnhof" \
+  --via "S Potsdam Hauptbahnhof" \
+  --arrival "2026-11-07 18:00"
 
 # Output all detail fields supplied by BVG as a JSON array
 java -jar target/oepnv-victim.jar --from "Treuenbrietzen, Bahnhof" --to "Jüterbog, Bahnhof" --json
@@ -91,6 +104,14 @@ service information. If no onward journey is available on the returned page, tha
 candidate is omitted. Via searches make an additional station lookup and up to N
 additional journey requests.
 
+With `--arrival`, planning runs backwards: for each of the first N journeys from
+`via → to` arriving at the requested time, the tool searches `from → via` with
+arrival no later than the onward departure. It selects the feasible journey with
+the latest arrival at the intermediate station, accounting for reported delays.
+The preceding search time is rounded down to whole minutes; dates may cross
+midnight. Candidates without a feasible preceding journey are omitted. The same
+transfer-time and optimisation limitations described above apply.
+
 For `--json`, combined journeys contain `via`, a combined `summary` and `legs`,
 and a `viaConnections` array preserving both original BVG journey objects and all
 their fields. No synthetic BVG journey ID is assigned.
@@ -98,12 +119,15 @@ their fields. No synthetic BVG journey ID is assigned.
 `--limit` restricts the output to at most N journeys from the first page of results
 (default: 5). No further pages are fetched.
 `--timeout` sets the timeout for each HTTP request in seconds (default: 30).
-`--departure` optionally sets the departure date and time in the
+`--departure` optionally sets the departure date and time; `--arrival` instead
+sets the requested arrival date and time at the destination. Both use the
 strict format `YYYY-MM-DD HH:mm`, for example `"2026-11-07 15:22"`. Quote the value
 because it contains a space. It is interpreted as local time in Berlin
 (`Europe/Berlin`), not the time zone of the computer running the CLI. Invalid dates,
 times and formats are rejected with exit code `2` before any network request.
-If omitted, the search uses **departure now**.
+`--departure` and `--arrival` are mutually exclusive; specifying both is rejected
+with exit code `2` before any network request. If neither is specified, the search
+uses **departure now**.
 
 The search includes all modes of transport from the example URL and real-time
 data. Times are local BVG timetable times; missing delay data is not interpreted
@@ -176,5 +200,6 @@ The tests run without accessing external BVG services: a local HTTP test server
 checks the workflow from HTML parsing to the details query. Further tests cover
 name resolution, UTF-8 and URL parameters, error cases, journey legs, platforms,
 delays, walking transfers, journeys crossing midnight, notices, terminal styling,
-configured departure times, intermediate stations and onward journeys, CLI validation,
+configured departure and arrival times, mutually exclusive time options,
+intermediate stations, forward and backward journey planning, CLI validation,
 text and JSON output, query errors, and interruption handling.

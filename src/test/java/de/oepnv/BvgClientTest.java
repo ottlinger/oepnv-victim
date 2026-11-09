@@ -114,6 +114,63 @@ class BvgClientTest {
     }
 
     @Test
+    void passesConfiguredArrivalToPageAndConnectionSearch() throws Exception {
+        var result = new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, null, LocalDateTime.of(2026, 11, 7, 16, 0), null);
+        String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
+        String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
+        for (String uri : List.of(requests.get(0), page, connectionRequest)) {
+            assertTrue(uri.contains("timeSel=arrive"), uri);
+            assertTrue(uri.contains("date=2026-11-07"), uri);
+            assertTrue(uri.contains("time=16:00"), uri);
+        }
+        assertEquals(1, result.connections().size());
+    }
+
+    @Test
+    void rejectsBothTimesBeforeAnyRequest() {
+        LocalDateTime time = LocalDateTime.of(2026, 11, 7, 16, 0);
+        assertThrows(IllegalArgumentException.class, () -> new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, time, time, null));
+        assertTrue(requests.isEmpty());
+    }
+
+    @Test
+    void plansArrivalViaBackwardsAcrossMidnightAndRejectsLateTransfers() throws Exception {
+        onwardResponse = "{\"connections\":[" + journey("S Potsdam Hauptbahnhof", "Jüterbog, Bahnhof",
+                "2026-11-07T23:59:30", "2026-11-08T00:30:00", "") + "]}";
+        response = "{\"connections\":["
+                + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:30:00", "2026-11-07T23:40:00", "") + ","
+                + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:40:00", "2026-11-07T23:55:00", "PT2M") + ","
+                + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:20:00", "2026-11-07T23:35:00", "") + ","
+                + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:45:00", "2026-11-07T23:58:00", "PT2M") + "]}";
+        var result = new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
+                null, LocalDateTime.of(2026, 11, 8, 0, 30), "Potsdam");
+        assertEquals(1, result.connections().size());
+        var combined = result.connections().get(0);
+        assertEquals("23:40:00", combined.path("summary").path("departure").path("time").asText());
+        assertEquals("00:30:00", combined.path("summary").path("arrival").path("time").asText());
+        assertEquals(2, combined.path("legs").size());
+        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=via-id")
+                && r.contains("timeSel=arrive") && r.contains("date=2026-11-08") && r.contains("time=00:30")));
+        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("ZID=via-id")
+                && r.contains("timeSel=arrive") && r.contains("date=2026-11-07") && r.contains("time=23:59")));
+    }
+
+    @Test
+    void arrivalViaWithoutFeasiblePrecedingJourneyReturnsNoResults() throws Exception {
+        onwardResponse = "{\"connections\":[" + journey("S Potsdam Hauptbahnhof", "Jüterbog",
+                "2026-11-07T15:40:00", "2026-11-07T16:00:00", "") + "]}";
+        for (String preceding : List.of("{\"connections\":[]}", "{\"connections\":["
+                + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T15:30:00",
+                "2026-11-07T15:39:00", "PT2M") + "]}")) {
+            response = preceding;
+            assertTrue(new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
+                    null, LocalDateTime.of(2026, 11, 7, 16, 0), "Potsdam").connections().isEmpty());
+        }
+    }
+
+    @Test
     void plansViaWithResolvedStationAndArrivalTimeAcrossMidnight() throws Exception {
         response = "{\"connections\":[" + journey("Treuenbrietzen, Bahnhof", "S Potsdam Hauptbahnhof",
                 "2026-11-07T23:55:00", "2026-11-08T00:05:00", "PT2M30S") + "]}";
