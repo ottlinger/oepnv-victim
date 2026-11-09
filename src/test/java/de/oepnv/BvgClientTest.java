@@ -19,12 +19,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BvgClientTest {
     private HttpServer server;
@@ -78,25 +74,22 @@ class BvgClientTest {
     void parsesHtmlAndFetchesDetailsWithResolvedIds() throws Exception {
         var result = new BvgClient(base, Duration.ofSeconds(5))
                 .search("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", 1);
-        assertEquals(1, result.connections().size());
-        assertEquals("RB33", result.connections().get(0).path("legs").get(0).path("service").path("name").asText());
-        assertEquals("Jüterbog, Bahnhof", result.destination());
-        assertNull(result.via());
-        assertEquals(4, requests.size());
-        assertTrue(requests.get(0).startsWith("/de/verbindungen/fahrplanauskunft?"));
-        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("input=Jüterbog, Bahnhof")));
-        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
-                && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("products=127")));
+        assertThat(result.connections()).hasSize(1);
+        assertThat(result.connections().get(0).path("legs").get(0).path("service").path("name").asText()).isEqualTo("RB33");
+        assertThat(result.destination()).isEqualTo("Jüterbog, Bahnhof");
+        assertThat(result.via()).isNull();
+        assertThat(requests).hasSize(4);
+        assertThat(requests.get(0)).startsWith("/de/verbindungen/fahrplanauskunft?");
+        assertThat(requests).anyMatch((final var r) -> r.contains("input=Jüterbog, Bahnhof"));
+        assertThat(requests).anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
+                && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("products=127"));
         String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
-        assertTrue(page.contains("destinationName=Jüterbog, Bahnhof"));
-        assertTrue(page.contains("regionalTraffic=on"));
-        assertTrue(page.contains("timeSel=now"));
-        assertTrue(requests.get(0).contains("timeSel=now"));
+        assertThat(page).contains("destinationName=Jüterbog, Bahnhof", "regionalTraffic=on", "timeSel=now");
+        assertThat(requests.get(0)).contains("timeSel=now");
         String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
-        assertTrue(connectionRequest.contains("timeSel=depart"));
+        assertThat(connectionRequest).contains("timeSel=depart");
         for (String uri : List.of(page, requests.get(0), connectionRequest)) {
-            assertFalse(uri.matches(".*[?&]date=.*"));
-            assertFalse(uri.matches(".*[?&]time=.*"));
+            assertThat(uri).doesNotMatch(".*[?&]date=.*").doesNotMatch(".*[?&]time=.*");
         }
     }
 
@@ -108,12 +101,10 @@ class BvgClientTest {
         String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
         String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
         for (String uri : List.of(requests.get(0), page, connectionRequest)) {
-            assertTrue(uri.contains("timeSel=depart"), uri);
-            assertTrue(uri.contains("date=2026-11-07"), uri);
-            assertTrue(uri.contains("time=15:22"), uri);
-            assertFalse(uri.contains("timeSel=now"), uri);
+            assertThat(uri).contains("timeSel=depart", "date=2026-11-07", "time=15:22")
+                    .doesNotContain("timeSel=now");
         }
-        assertEquals(1, result.connections().size());
+        assertThat(result.connections()).hasSize(1);
     }
 
     @Test
@@ -123,11 +114,9 @@ class BvgClientTest {
         String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
         String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
         for (String uri : List.of(requests.get(0), page, connectionRequest)) {
-            assertTrue(uri.contains("timeSel=arrive"), uri);
-            assertTrue(uri.contains("date=2026-11-07"), uri);
-            assertTrue(uri.contains("time=16:00"), uri);
+            assertThat(uri).contains("timeSel=arrive", "date=2026-11-07", "time=16:00");
         }
-        assertEquals(1, result.connections().size());
+        assertThat(result.connections()).hasSize(1);
     }
 
     @Test
@@ -138,13 +127,13 @@ class BvgClientTest {
                                         final var departure, final var arrival, final var via, final var timeout) ->
                     new BvgClient(base, timeout).search(origin, destination, limit, departure, arrival, via));
             final StringWriter err = new StringWriter();
-            assertEquals(0, new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
+            assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                     .setErr(new PrintWriter(err)).execute("--from", "Treuenbrietzen", "--to", "Jüterbog",
-                            option, "2026-11-07 9:00"), err.toString());
-            assertEquals(4, requests.size());
+                            option, "2026-11-07 9:00")).as("%s", err).isZero();
+            assertThat(requests).hasSize(4);
             for (final String request : List.of(requests.get(0), requests.get(3))) {
-                assertTrue(request.contains("time=09:00"), request);
-                assertTrue(request.contains("timeSel=" + (option.equals("--arrival") ? "arrive" : "depart")), request);
+                assertThat(request).contains("time=09:00",
+                        "timeSel=" + (option.equals("--arrival") ? "arrive" : "depart"));
             }
         }
     }
@@ -152,9 +141,10 @@ class BvgClientTest {
     @Test
     void rejectsBothTimesBeforeAnyRequest() {
         LocalDateTime time = LocalDateTime.of(2026, 11, 7, 16, 0);
-        assertThrows(IllegalArgumentException.class, () -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, time, time, null));
-        assertTrue(requests.isEmpty());
+        assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, time, time, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(requests).isEmpty();
     }
 
     @Test
@@ -168,15 +158,15 @@ class BvgClientTest {
                 + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:45:00", "2026-11-07T23:58:00", "PT2M") + "]}";
         var result = new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
                 null, LocalDateTime.of(2026, 11, 8, 0, 30), "Potsdam");
-        assertEquals(1, result.connections().size());
+        assertThat(result.connections()).hasSize(1);
         var combined = result.connections().get(0);
-        assertEquals("23:40:00", combined.path("summary").path("departure").path("time").asText());
-        assertEquals("00:30:00", combined.path("summary").path("arrival").path("time").asText());
-        assertEquals(2, combined.path("legs").size());
-        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=via-id")
-                && r.contains("timeSel=arrive") && r.contains("date=2026-11-08") && r.contains("time=00:30")));
-        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("ZID=via-id")
-                && r.contains("timeSel=arrive") && r.contains("date=2026-11-07") && r.contains("time=23:59")));
+        assertThat(combined.path("summary").path("departure").path("time").asText()).isEqualTo("23:40:00");
+        assertThat(combined.path("summary").path("arrival").path("time").asText()).isEqualTo("00:30:00");
+        assertThat(combined.path("legs")).hasSize(2);
+        assertThat(requests).anyMatch((final var r) -> r.contains("SID=via-id")
+                && r.contains("timeSel=arrive") && r.contains("date=2026-11-08") && r.contains("time=00:30"));
+        assertThat(requests).anyMatch((final var r) -> r.contains("ZID=via-id")
+                && r.contains("timeSel=arrive") && r.contains("date=2026-11-07") && r.contains("time=23:59"));
     }
 
     @Test
@@ -187,8 +177,8 @@ class BvgClientTest {
                 + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T15:30:00",
                 "2026-11-07T15:39:00", "PT2M") + "]}")) {
             response = preceding;
-            assertTrue(new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
-                    null, LocalDateTime.of(2026, 11, 7, 16, 0), "Potsdam").connections().isEmpty());
+            assertThat(new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
+                    null, LocalDateTime.of(2026, 11, 7, 16, 0), "Potsdam").connections()).isEmpty();
         }
     }
 
@@ -201,42 +191,42 @@ class BvgClientTest {
                 + journey("S Potsdam Hauptbahnhof", "Jüterbog, Bahnhof", "2026-11-08T00:10:00", "2026-11-08T00:30:00", "") + "]}";
         var result = new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
                 LocalDateTime.of(2026, 11, 7, 23, 50), "Potsdam");
-        assertEquals("S Potsdam Hauptbahnhof", result.via());
-        assertEquals(1, result.connections().size());
+        assertThat(result.via()).isEqualTo("S Potsdam Hauptbahnhof");
+        assertThat(result.connections()).hasSize(1);
         assertCombinedViaJourney(result.connections().get(0));
-        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
-                && r.contains("ZID=via-id") && r.contains("time=23:50")));
-        assertTrue(requests.stream().anyMatch((final var r) -> r.contains("SID=via-id")
+        assertThat(requests).anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
+                && r.contains("ZID=via-id") && r.contains("time=23:50"));
+        assertThat(requests).anyMatch((final var r) -> r.contains("SID=via-id")
                 && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("date=2026-11-08")
-                && r.contains("time=00:08")));
-        assertEquals(6, requests.size());
+                && r.contains("time=00:08"));
+        assertThat(requests).hasSize(6);
     }
 
     private static void assertCombinedViaJourney(final com.fasterxml.jackson.databind.JsonNode combined) {
-        assertEquals(2, combined.path("legs").size());
-        assertEquals("S Potsdam Hauptbahnhof", combined.path("legs").get(0).path("arrivalStop").path("name").asText());
-        assertEquals("00:10:00", combined.path("legs").get(1).path("departure").path("time").asText());
-        assertEquals("PT35M", combined.path("summary").path("totalDuration").asText());
-        assertEquals(2, combined.path("viaConnections").size());
-        assertTrue(ConnectionFormatter.format(1, combined).contains("35 Min."));
+        assertThat(combined.path("legs")).hasSize(2);
+        assertThat(combined.path("legs").get(0).path("arrivalStop").path("name").asText()).isEqualTo("S Potsdam Hauptbahnhof");
+        assertThat(combined.path("legs").get(1).path("departure").path("time").asText()).isEqualTo("00:10:00");
+        assertThat(combined.path("summary").path("totalDuration").asText()).isEqualTo("PT35M");
+        assertThat(combined.path("viaConnections")).hasSize(2);
+        assertThat(ConnectionFormatter.format(1, combined)).contains("35 Min.");
     }
 
     @Test
     void viaWithNoOnwardJourneyReturnsNoResults() throws Exception {
         response = "{\"connections\":[" + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof",
                 "2026-11-07T15:22:00", "2026-11-07T15:40:00", "") + "]}";
-        assertTrue(new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam").connections().isEmpty());
+        assertThat(new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam").connections()).isEmpty();
     }
 
     @Test
     void ambiguousViaListsStationsBeforePlanningAnyJourney() {
         viaLocations = "[{\"type\":\"HST\",\"name\":\"Potsdam A\",\"id\":\"a\"},"
                 + "{\"type\":\"HST\",\"name\":\"Potsdam B\",\"id\":\"b\"}]";
-        IOException error = assertThrows(IOException.class, () -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam"));
-        assertTrue(error.getMessage().contains("Potsdam A; Potsdam B"));
-        assertFalse(requests.stream().anyMatch((final var r) -> r.startsWith("/connections?")));
+        assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam"))
+                .isInstanceOf(IOException.class).hasMessageContaining("Potsdam A; Potsdam B");
+        assertThat(requests).noneMatch((final var r) -> r.startsWith("/connections?"));
     }
 
     private static String journey(final String from, final String to, final String departure,
@@ -252,38 +242,41 @@ class BvgClientTest {
     @Test
     void emptyResultsAreNotASchemaError() throws Exception {
         response = "{\"connections\":[]}";
-        assertTrue(new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 5)
-                .connections().isEmpty());
+        assertThat(new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 5)
+                .connections()).isEmpty();
     }
 
     @Test
     void reportsHttpErrors() {
         status = 503;
-        IOException error = assertThrows(IOException.class, () -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 5));
-        assertTrue(error.getMessage().contains("HTTP 503"));
+        assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 5))
+                .isInstanceOf(IOException.class).hasMessageContaining("HTTP 503");
     }
 
     @Test
     void reportsChangedResponseSchema() {
         response = "{\"error\":\"unavailable\"}";
-        IOException error = assertThrows(IOException.class, () -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 5));
-        assertTrue(error.getMessage().contains("connections"));
+        assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 5))
+                .isInstanceOf(IOException.class).hasMessageContaining("connections");
     }
 
     @Test
     void parsesEmbeddedJsonNotVisibleText() throws Exception {
         var endpoints = BvgClient.parseEndpoints(html(), base);
-        assertEquals(base.resolve("/locations"), endpoints.locations());
-        assertEquals(base.resolve("/connections"), endpoints.connections());
+        assertThat(endpoints.locations()).isEqualTo(base.resolve("/locations"));
+        assertThat(endpoints.connections()).isEqualTo(base.resolve("/connections"));
     }
 
     @Test
     void rejectsMissingConfigurationAndForeignEndpoints() {
-        assertThrows(IOException.class, () -> BvgClient.parseEndpoints("<html>Fehlerseite</html>", base));
-        assertThrows(IOException.class, () -> BvgClient.parseEndpoints(html().replace("/connections", "https://example.org/connections"), base));
-        assertThrows(IOException.class, () -> BvgClient.parseEndpoints("<script id='__NEXT_DATA__'>{}</script>", base));
+        assertThatThrownBy(() -> BvgClient.parseEndpoints("<html>Fehlerseite</html>", base))
+                .isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> BvgClient.parseEndpoints(html().replace("/connections", "https://example.org/connections"), base))
+                .isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> BvgClient.parseEndpoints("<script id='__NEXT_DATA__'>{}</script>", base))
+                .isInstanceOf(IOException.class);
     }
 
     @Test
@@ -293,18 +286,19 @@ class BvgClientTest {
                  {"type":"HST","name":"Jüterbog, Bahnhof Süd","id":"south"},
                  {"type":"HST","name":"Jüterbog, Bahnhof","id":"correct"}]
                 """);
-        assertEquals("correct", BvgClient.selectStation(locations, "jüterbog, bahnhof").id());
-        IOException ambiguity = assertThrows(IOException.class,
-                () -> BvgClient.selectStation(locations, "Jüterbog"));
-        assertTrue(ambiguity.getMessage().contains("nicht eindeutig"));
-        assertTrue(ambiguity.getMessage().contains("Jüterbog, Bahnhof Süd; Jüterbog, Bahnhof"));
-        assertFalse(ambiguity.getMessage().contains("poi"));
-        assertThrows(IOException.class, () -> BvgClient.selectStation(BvgClient.JSON.readTree("[]"), "unbekannt"));
+        assertThat(BvgClient.selectStation(locations, "jüterbog, bahnhof").id()).isEqualTo("correct");
+        assertThatThrownBy(() -> BvgClient.selectStation(locations, "Jüterbog"))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("nicht eindeutig")
+                .hasMessageContaining("Jüterbog, Bahnhof Süd; Jüterbog, Bahnhof")
+                .hasMessageNotContaining("poi");
+        assertThatThrownBy(() -> BvgClient.selectStation(BvgClient.JSON.readTree("[]"), "unbekannt"))
+                .isInstanceOf(IOException.class);
     }
 
     static String fixture() throws IOException {
         try (var in = BvgClientTest.class.getResourceAsStream("/connections.json")) {
-            assertNotNull(in);
+            assertThat(in).isNotNull();
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }

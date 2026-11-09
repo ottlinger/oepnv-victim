@@ -7,9 +7,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.time.LocalDateTime;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ViaJourneyTest {
     @Test
@@ -19,16 +18,15 @@ class ViaJourneyTest {
         JsonNode second = connections.get(1);
         JsonNode snapshot = connections.deepCopy();
         JsonNode combined = ViaJourney.combine(first, second, "Zwischenstation");
-        assertEquals(first.path("summary").path("departure"), combined.path("summary").path("departure"));
-        assertEquals(second.path("summary").path("arrival"), combined.path("summary").path("arrival"));
-        assertEquals(first.path("legs").size() + second.path("legs").size(), combined.path("legs").size());
-        assertTrue(combined.path("summary").path("hasWarnings").asBoolean());
-        assertEquals(first, combined.path("viaConnections").get(0));
-        assertEquals(second, combined.path("viaConnections").get(1));
-        assertEquals(snapshot, connections);
+        assertThat(combined.path("summary").path("departure")).isEqualTo(first.path("summary").path("departure"));
+        assertThat(combined.path("summary").path("arrival")).isEqualTo(second.path("summary").path("arrival"));
+        assertThat(combined.path("legs")).hasSize(first.path("legs").size() + second.path("legs").size());
+        assertThat(combined.path("summary").path("hasWarnings").asBoolean()).isTrue();
+        assertThat(combined.path("viaConnections").get(0)).isEqualTo(first);
+        assertThat(combined.path("viaConnections").get(1)).isEqualTo(second);
+        assertThat(connections).isEqualTo(snapshot);
         String text = ConnectionFormatter.format(1, combined);
-        assertTrue(text.contains("Bitte Hinweis beachten."));
-        assertTrue(text.contains("Fußweg / Transfer"));
+        assertThat(text).contains("Bitte Hinweis beachten.", "Fußweg / Transfer");
     }
 
     @Test
@@ -40,25 +38,26 @@ class ViaJourneyTest {
                 """;
         JsonNode combined = ViaJourney.combine(BvgClient.JSON.readTree(template.formatted("summary A", "warning A")),
                 BvgClient.JSON.readTree(template.formatted("summary B", "warning B")), "Via");
-        assertEquals(2, combined.path("summary").path("notices").size());
-        assertEquals(2, combined.path("warnings").size());
+        assertThat(combined.path("summary").path("notices")).hasSize(2);
+        assertThat(combined.path("warnings")).hasSize(2);
         String text = ConnectionFormatter.format(1, combined);
         for (String message : new String[]{"summary A", "summary B", "warning A", "warning B"}) {
-            assertTrue(text.contains(message));
+            assertThat(text).contains(message);
         }
     }
 
     @Test
     void computesEffectiveTimeAndRejectsUnusableTimingData() throws Exception {
-        assertEquals(LocalDateTime.of(2026, 11, 8, 0, 2), ViaJourney.effectiveTime(BvgClient.JSON.readTree("""
+        assertThat(ViaJourney.effectiveTime(BvgClient.JSON.readTree("""
                 {"date":"2026-11-07","time":"23:59:00","delay":"PT3M"}
-                """)));
-        assertEquals(LocalDateTime.of(2026, 11, 7, 15, 22), ViaJourney.effectiveTime(BvgClient.JSON.readTree("""
+                """))).isEqualTo(LocalDateTime.of(2026, 11, 8, 0, 2));
+        assertThat(ViaJourney.effectiveTime(BvgClient.JSON.readTree("""
                 {"date":"2026-11-07","time":"15:22:00"}
-                """)));
-        assertThrows(IOException.class, () -> ViaJourney.effectiveTime(BvgClient.JSON.readTree("{}")));
-        assertThrows(IOException.class, () -> ViaJourney.effectiveTime(BvgClient.JSON.readTree("""
+                """))).isEqualTo(LocalDateTime.of(2026, 11, 7, 15, 22));
+        assertThatThrownBy(() -> ViaJourney.effectiveTime(BvgClient.JSON.readTree("{}")))
+                .isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> ViaJourney.effectiveTime(BvgClient.JSON.readTree("""
                 {"date":"2026-11-07","time":"15:22:00","delay":"unknown"}
-                """)));
+                """))).isInstanceOf(IOException.class);
     }
 }

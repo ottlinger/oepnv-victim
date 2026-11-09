@@ -12,25 +12,17 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 class MainTest {
     @Test
     void helpDoesNotAccessNetwork() {
         StringWriter out = new StringWriter();
         int code = new CommandLine(new Main()).setOut(new PrintWriter(out)).execute("--help");
-        assertEquals(0, code);
-        assertTrue(out.toString().contains("--from"));
-        assertTrue(out.toString().contains("--to"));
-        assertTrue(out.toString().contains("--via"));
-        assertTrue(out.toString().contains("Stationen müssen eindeutig sein"));
-        assertTrue(out.toString().contains("BVG-Stationssuche"));
-        assertFalse(out.toString().contains("--startzeit"));
-        assertTrue(out.toString().contains("--departure"));
-        assertTrue(out.toString().contains("--arrival"));
+        assertThat(code).isZero();
+        assertThat(out.toString()).contains("--from", "--to", "--via", "Stationen müssen eindeutig sein",
+                "BVG-Stationssuche", "--departure", "--arrival").doesNotContain("--startzeit");
     }
 
     @Test
@@ -40,13 +32,13 @@ class MainTest {
         StringWriter err = new StringWriter();
         Main main = new Main((final var origin, final var destination, final var limit,
                               final var departure, final var arrival, final var via, final var timeout) -> {
-            assertNull(arrival);
-            assertEquals("Treuenbrietzen", origin);
-            assertEquals("Jüterbog", destination);
-            assertEquals(2, limit);
-            assertEquals(LocalDateTime.of(2026, 11, 7, 15, 22), departure);
-            assertEquals("Potsdam", via);
-            assertEquals(Duration.ofSeconds(12), timeout);
+            assertThat(arrival).isNull();
+            assertThat(origin).isEqualTo("Treuenbrietzen");
+            assertThat(destination).isEqualTo("Jüterbog");
+            assertThat(limit).isEqualTo(2);
+            assertThat(departure).isEqualTo(LocalDateTime.of(2026, 11, 7, 15, 22));
+            assertThat(via).isEqualTo("Potsdam");
+            assertThat(timeout).isEqualTo(Duration.ofSeconds(12));
             return new BvgClient.Result("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof",
                     "S Potsdam Hauptbahnhof", URI.create("https://example.org/not-for-output"),
                     List.of(connection, connection));
@@ -55,17 +47,12 @@ class MainTest {
                 .setColorScheme(new CommandLine.Help.ColorScheme.Builder().ansi(CommandLine.Help.Ansi.ON).build());
         int code = command.execute("--from", "Treuenbrietzen", "--to", "Jüterbog", "--via", "Potsdam",
                 "--departure", "2026-11-07 15:22", "--limit", "2", "--timeout", "12");
-        assertEquals(0, code);
-        assertTrue(out.toString().contains("Start: Treuenbrietzen, Bahnhof"));
-        assertTrue(out.toString().contains("Ziel:  Jüterbog, Bahnhof"));
-        assertTrue(out.toString().contains("Via:   S Potsdam Hauptbahnhof"));
-        assertTrue(out.toString().contains("Verbindung 1:"));
-        assertTrue(out.toString().contains("Verbindung 2:"));
-        assertTrue(out.toString().contains(" | Gesamt: 18 Min."));
-        assertTrue(out.toString().contains(CommandLine.Help.Ansi.ON.string("@|bold 2026-11-07 12:29|@")));
-        assertFalse(out.toString().contains("https://"));
-        assertFalse(out.toString().contains("BVG:"));
-        assertEquals("", err.toString());
+        assertThat(code).isZero();
+        assertThat(out.toString()).contains("Start: Treuenbrietzen, Bahnhof", "Ziel:  Jüterbog, Bahnhof",
+                "Via:   S Potsdam Hauptbahnhof", "Verbindung 1:", "Verbindung 2:", " | Gesamt: 18 Min.",
+                CommandLine.Help.Ansi.ON.string("@|bold 2026-11-07 12:29|@"))
+                .doesNotContain("https://", "BVG:");
+        assertThat(err.toString()).isEmpty();
     }
 
     @Test
@@ -78,14 +65,13 @@ class MainTest {
                 new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of(connection)));
         CommandLine command = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
                 .setColorScheme(new CommandLine.Help.ColorScheme.Builder().ansi(CommandLine.Help.Ansi.ON).build());
-        assertEquals(0, command.execute("--from", "A", "--to", "B", "--json"));
+        assertThat(command.execute("--from", "A", "--to", "B", "--json")).isZero();
         var json = BvgClient.JSON.readTree(out.toString());
-        assertTrue(json.isArray());
-        assertEquals(1, json.size());
-        assertEquals(connection, json.get(0));
-        assertFalse(out.toString().contains("\u001B"));
-        assertFalse(out.toString().contains("Start:"));
-        assertEquals("", err.toString());
+        assertThat(json.isArray()).isTrue();
+        assertThat(json).hasSize(1);
+        assertThat(json.get(0)).isEqualTo(connection);
+        assertThat(out.toString()).doesNotContain("\u001B", "Start:");
+        assertThat(err.toString()).isEmpty();
     }
 
     @Test
@@ -93,17 +79,15 @@ class MainTest {
         StringWriter out = new StringWriter();
         Main main = new Main((final var origin, final var destination, final var limit,
                               final var departure, final var arrival, final var via, final var timeout) -> {
-            assertNull(arrival);
-            assertEquals(5, limit);
-            assertEquals(Duration.ofSeconds(30), timeout);
-            assertNull(departure);
-            assertNull(via);
+            assertThat(arrival).isNull();
+            assertThat(limit).isEqualTo(5);
+            assertThat(timeout).isEqualTo(Duration.ofSeconds(30));
+            assertThat(departure).isNull();
+            assertThat(via).isNull();
             return new BvgClient.Result(origin, destination, null, URI.create("https://example.org"), List.of());
         });
-        assertEquals(0, new CommandLine(main).setOut(new PrintWriter(out)).execute("--from", "A", "--to", "B"));
-        assertTrue(out.toString().contains("Keine Verbindungen gefunden."));
-        assertFalse(out.toString().contains("Via:"));
-        assertFalse(out.toString().contains("Verbindung 1:"));
+        assertThat(new CommandLine(main).setOut(new PrintWriter(out)).execute("--from", "A", "--to", "B")).isZero();
+        assertThat(out.toString()).contains("Keine Verbindungen gefunden.").doesNotContain("Via:", "Verbindung 1:");
     }
 
     @Test
@@ -112,9 +96,9 @@ class MainTest {
         Main main = new Main((final var origin, final var destination, final var limit,
                               final var departure, final var arrival, final var via, final var timeout) ->
                 new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of()));
-        assertEquals(0, new CommandLine(main).setOut(new PrintWriter(out))
-                .execute("--from", "A", "--to", "B", "--json"));
-        assertEquals(BvgClient.JSON.createArrayNode(), BvgClient.JSON.readTree(out.toString()));
+        assertThat(new CommandLine(main).setOut(new PrintWriter(out))
+                .execute("--from", "A", "--to", "B", "--json")).isZero();
+        assertThat(BvgClient.JSON.readTree(out.toString())).isEqualTo(BvgClient.JSON.createArrayNode());
     }
 
     @Test
@@ -127,9 +111,9 @@ class MainTest {
         });
         int code = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
                 .execute("--from", "A", "--to", "B");
-        assertEquals(1, code);
-        assertEquals("", out.toString());
-        assertTrue(err.toString().contains("Fehler: Station ist nicht eindeutig: Station A; Station B"));
+        assertThat(code).isEqualTo(1);
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).contains("Fehler: Station ist nicht eindeutig: Station A; Station B");
     }
 
     @Test
@@ -140,14 +124,14 @@ class MainTest {
                               final var departure, final var arrival, final var via, final var timeout) -> {
             throw new InterruptedException("cancelled");
         });
-        assertFalse(Thread.currentThread().isInterrupted());
+        assertThat(Thread.currentThread().isInterrupted()).isFalse();
         try {
             int code = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
                     .execute("--from", "A", "--to", "B");
-            assertEquals(1, code);
-            assertTrue(Thread.currentThread().isInterrupted());
-            assertTrue(err.toString().contains("Fehler: Abfrage wurde unterbrochen."));
-            assertEquals("", out.toString());
+            assertThat(code).isEqualTo(1);
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            assertThat(err.toString()).contains("Fehler: Abfrage wurde unterbrochen.");
+            assertThat(out.toString()).isEmpty();
         } finally {
             Thread.interrupted();
         }
@@ -157,22 +141,23 @@ class MainTest {
     void parsesDepartureTimeWithoutNetwork() {
         var parsed = new CommandLine(new Main())
                 .parseArgs("--from", "A", "--to", "B", "--departure", "2026-11-07 15:22");
-        assertEquals(LocalDateTime.of(2026, 11, 7, 15, 22), parsed.matchedOptionValue("--departure", null));
+        assertThat(parsed.<LocalDateTime>matchedOptionValue("--departure", null))
+                .isEqualTo(LocalDateTime.of(2026, 11, 7, 15, 22));
         var defaults = new CommandLine(new Main()).parseArgs("--from", "A", "--to", "B");
-        assertNull(defaults.matchedOptionValue("--departure", null));
+        assertThat(defaults.<LocalDateTime>matchedOptionValue("--departure", null)).isNull();
     }
 
     @Test
     void passesArrivalTimeToSearchWithoutNetwork() {
         Main main = new Main((final var origin, final var destination, final var limit,
                               final var departure, final var arrival, final var via, final var timeout) -> {
-            assertNull(departure);
-            assertEquals(LocalDateTime.of(2026, 11, 7, 16, 0), arrival);
-            assertEquals("Potsdam", via);
+            assertThat(departure).isNull();
+            assertThat(arrival).isEqualTo(LocalDateTime.of(2026, 11, 7, 16, 0));
+            assertThat(via).isEqualTo("Potsdam");
             return new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of());
         });
-        assertEquals(0, new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
-                .execute("--from", "A", "--to", "B", "--via", "Potsdam", "--arrival", "2026-11-07 16:00"));
+        assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
+                .execute("--from", "A", "--to", "B", "--via", "Potsdam", "--arrival", "2026-11-07 16:00")).isZero();
     }
 
     @Test
@@ -183,12 +168,13 @@ class MainTest {
                         Integer.parseInt(time.split(":")[0]), Integer.parseInt(time.split(":")[1]));
                 final Main main = new Main((final var origin, final var destination, final var limit,
                                             final var departure, final var arrival, final var via, final var timeout) -> {
-                    assertEquals(expected, option.equals("--departure") ? departure : arrival);
-                    assertNull(option.equals("--departure") ? arrival : departure);
+                    assertThat(option.equals("--departure") ? departure : arrival).isEqualTo(expected);
+                    assertThat(option.equals("--departure") ? arrival : departure).isNull();
                     return new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of());
                 });
-                assertEquals(0, new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
-                        .execute("--from", "A", "--to", "B", option, "2026-11-07 " + time), option + " " + time);
+                assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
+                        .execute("--from", "A", "--to", "B", option, "2026-11-07 " + time))
+                        .as("%s %s", option, time).isZero();
             }
         }
     }
@@ -198,19 +184,20 @@ class MainTest {
         StringWriter err = new StringWriter();
         Main main = new Main((final var origin, final var destination, final var limit,
                               final var departure, final var arrival, final var via, final var timeout) -> {
-            throw new AssertionError("Invalid arguments must not trigger a search");
+            return fail("Invalid arguments must not trigger a search");
         });
-        assertEquals(2, new CommandLine(main).setErr(new PrintWriter(err)).execute(
-                "--from", "A", "--to", "B", "--departure", "2026-11-07 15:22", "--arrival", "2026-11-07 16:00"));
-        assertTrue(err.toString().contains("--departure und --arrival"));
+        assertThat(new CommandLine(main).setErr(new PrintWriter(err)).execute(
+                "--from", "A", "--to", "B", "--departure", "2026-11-07 15:22", "--arrival", "2026-11-07 16:00"))
+                .isEqualTo(2);
+        assertThat(err.toString()).contains("--departure und --arrival");
     }
 
     @Test
     void parsesOptionalViaWithoutNetwork() {
         var parsed = new CommandLine(new Main()).parseArgs("--from", "A", "--to", "B", "--via", "Potsdam");
-        assertEquals("Potsdam", parsed.matchedOptionValue("--via", null));
+        assertThat(parsed.<String>matchedOptionValue("--via", null)).isEqualTo("Potsdam");
         var defaults = new CommandLine(new Main()).parseArgs("--from", "A", "--to", "B");
-        assertNull(defaults.matchedOptionValue("--via", null));
+        assertThat(defaults.<String>matchedOptionValue("--via", null)).isNull();
     }
 
     @Test
@@ -223,25 +210,25 @@ class MainTest {
                 StringWriter err = new StringWriter();
                 int code = new CommandLine(new Main()).setErr(new PrintWriter(err))
                         .execute("--from", "A", "--to", "B", option, value);
-                assertEquals(2, code, value);
-                assertTrue(err.toString().contains("YYYY-MM-DD HH:mm"), value);
+                assertThat(code).as("%s", value).isEqualTo(2);
+                assertThat(err.toString()).as("%s", value).contains("YYYY-MM-DD HH:mm");
             }
         }
-        assertEquals(LocalDateTime.of(2028, 2, 29, 0, 0),
-                new Main.DepartureTimeConverter().convert("2028-02-29 00:00"));
+        assertThat(new Main.DepartureTimeConverter().convert("2028-02-29 00:00"))
+                .isEqualTo(LocalDateTime.of(2028, 2, 29, 0, 0));
     }
 
     @Test
     void rejectsOldGermanOptionsWithoutNetwork() {
         var command = new CommandLine(new Main());
-        assertNull(command.getCommandSpec().findOption("--start"));
-        assertNull(command.getCommandSpec().findOption("--ziel"));
-        assertNull(command.getCommandSpec().findOption("--startzeit"));
+        assertThat(command.getCommandSpec().findOption("--start")).isNull();
+        assertThat(command.getCommandSpec().findOption("--ziel")).isNull();
+        assertThat(command.getCommandSpec().findOption("--startzeit")).isNull();
         for (String[] args : new String[][]{
                 {"--start", "A", "--to", "B"}, {"--from", "A", "--ziel", "B"},
                 {"--from", "A", "--to", "B", "--startzeit", "2026-11-07 15:22"}}) {
             int code = new CommandLine(new Main()).setErr(new PrintWriter(new StringWriter())).execute(args);
-            assertEquals(2, code);
+            assertThat(code).isEqualTo(2);
         }
     }
 
@@ -256,7 +243,7 @@ class MainTest {
                 {"--from", "A", "--to", "B", "--limit", "0"},
                 {"--from", "A", "--to", "B", "--timeout", "-1"}}) {
             int code = new CommandLine(new Main()).setErr(new PrintWriter(new StringWriter())).execute(args);
-            assertEquals(2, code);
+            assertThat(code).isEqualTo(2);
         }
     }
 }

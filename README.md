@@ -142,7 +142,7 @@ Verbindung 1: 2026-11-07 12:29 (+0 Min.) → 2026-11-07 12:47 (+0 Min.) | Gesamt
      2026-11-07 12:29 (+0 Min.)  Treuenbrietzen, Bahnhof (Gl. 2)
      2026-11-07 12:47 (+0 Min.)  Jüterbog, Bahnhof (Gl. 3)
      Dauer: 18 Min.
-     Halte (BVG): 3
+     Halte: 3
 ```
 
 Departure dates and times are shown in **bold** in both the journey summary and

@@ -33,7 +33,7 @@ final class ConnectionFormatter {
             out.append("     ").append(time(leg.path("arrival"))).append("  ").append(stop(leg.path("arrivalStop"))).append('\n');
             String legDuration = leg.path("duration").asText(service.path("duration").asText());
             if (!legDuration.isBlank()) out.append("     Dauer: ").append(duration(legDuration)).append('\n');
-            if (leg.has("stopCount")) out.append("     Halte (BVG): ").append(leg.path("stopCount").asText()).append('\n');
+            if (leg.has("stopCount")) out.append("     Halte: ").append(leg.path("stopCount").asText()).append('\n');
             warnings(out, leg);
         }
         warnings(out, connection);
