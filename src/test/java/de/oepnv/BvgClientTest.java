@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
 import java.io.IOException;
@@ -14,6 +15,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -136,6 +139,26 @@ class BvgClientTest {
                         "timeSel=" + (option.equals("--arrival") ? "arrive" : "depart"));
             }
         }
+    }
+
+    @Test
+    void cliLoadsYamlAndQueriesLocalServer(@TempDir final Path directory) throws IOException {
+        final Path config = Files.writeString(directory.resolve("journey.yml"), """
+                from: Treuenbrietzen
+                to: Jüterbog
+                arrival: '2026-11-07 9:00'
+                """);
+        final Main main = new Main((final var origin, final var destination, final var limit,
+                                    final var departure, final var arrival, final var via, final var timeout) ->
+                new BvgClient(base, timeout).search(origin, destination, limit, departure, arrival, via));
+        final StringWriter out = new StringWriter();
+        final StringWriter err = new StringWriter();
+        assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .execute("--config", config.toString(), "--json")).as("%s", err).isZero();
+        assertThat(err.toString()).isEmpty();
+        assertThat(BvgClient.JSON.readTree(out.toString())).isNotEmpty();
+        assertThat(requests).hasSize(4);
+        assertThat(requests.get(3)).contains("timeSel=arrive", "date=2026-11-07", "time=09:00");
     }
 
     @Test

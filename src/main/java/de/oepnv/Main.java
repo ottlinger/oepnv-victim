@@ -9,6 +9,7 @@ import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -40,11 +41,15 @@ public final class Main implements Callable<Integer> {
                                 final String via, final Duration timeout) throws IOException, InterruptedException;
     }
 
-    @Option(names = "--from", required = true, paramLabel = "STATION",
+    @Option(names = "--config", paramLabel = "FILE",
+            description = "YAML-Datei mit from, to, via, departure oder arrival; CLI-Optionen haben Vorrang.")
+    private Path config;
+
+    @Option(names = "--from", paramLabel = "STATION",
             description = "Eindeutige Startstation, z. B. 'Treuenbrietzen, Bahnhof'.")
     private String origin;
 
-    @Option(names = "--to", required = true, paramLabel = "STATION",
+    @Option(names = "--to", paramLabel = "STATION",
             description = "Eindeutige Zielstation, z. B. 'Jüterbog, Bahnhof'.")
     private String destination;
 
@@ -76,6 +81,11 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        loadConfig();
+        if (origin == null || destination == null) {
+            throw new CommandLine.ParameterException(spec.commandLine(),
+                    "--from und --to sind erforderlich (als CLI-Optionen oder in --config).");
+        }
         if (origin.isBlank() || destination.isBlank() || (via != null && via.isBlank()) || limit < 1 || timeout < 1) {
             throw new CommandLine.ParameterException(spec.commandLine(),
                     "--from, --to und --via dürfen nicht leer sein; --limit und --timeout müssen größer als 0 sein.");
@@ -110,6 +120,22 @@ public final class Main implements Callable<Integer> {
         } catch (final Exception e) {
             spec.commandLine().getErr().println("Fehler: " + e.getMessage());
             return 1;
+        }
+    }
+
+    private void loadConfig() {
+        if (config == null) return;
+        try {
+            final JourneyConfig saved = JourneyConfig.read(config);
+            if (origin == null) origin = saved.from();
+            if (destination == null) destination = saved.to();
+            if (via == null) via = saved.via();
+            final DepartureTimeConverter converter = new DepartureTimeConverter();
+            if (departure == null && saved.departure() != null) departure = converter.convert(saved.departure());
+            if (arrival == null && saved.arrival() != null) arrival = converter.convert(saved.arrival());
+        } catch (final IOException | IllegalArgumentException | CommandLine.TypeConversionException e) {
+            throw new CommandLine.ParameterException(spec.commandLine(),
+                    "Ungültige Konfiguration '" + config + "': " + e.getMessage(), e);
         }
     }
 

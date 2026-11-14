@@ -78,7 +78,43 @@ java -jar target/oepnv-victim.jar --from "Treuenbrietzen, Bahnhof" --to "Jüterb
 java -jar target/oepnv-victim.jar --help
 ```
 
-`--from` (origin station) and `--to` (destination station) are required parameters.
+### Saved connections (YAML)
+
+Save a connection in a UTF-8 YAML file, for example `commute.yml`:
+
+```yaml
+from: "Treuenbrietzen, Bahnhof"
+to: "Jüterbog, Bahnhof"
+via: "S Potsdam Hauptbahnhof"
+departure: "2026-11-07 9:00"
+```
+
+Load it with `--config`:
+
+```sh
+java -jar target/oepnv-victim.jar --config commute.yml
+
+# Override saved values for this invocation
+java -jar target/oepnv-victim.jar --config commute.yml --to "Berlin Hauptbahnhof" --json
+```
+
+The supported keys are `from`, `to`, `via`, `departure` and `arrival`. Only `from`
+and `to` are required; omit the others if not needed. Use `arrival` **instead of**
+`departure` to search by arrival time. Times use the same Berlin-local format and
+validation as the CLI options below; quote them as shown. Without either time,
+the search uses departure now.
+
+Explicit CLI options override the matching YAML keys, regardless of option order.
+Other options such as `--limit`, `--timeout` and `--json` can still be supplied on
+the command line. Partial configurations are supported if the remaining required
+fields are supplied on the CLI. The combined input must contain nonblank `from`
+and `to`, and must not contain both `departure` and `arrival` (including one from
+YAML and the other from the CLI). Unknown keys, duplicate keys, non-string or
+blank values, malformed YAML and unreadable files are rejected with exit code `2`
+before any network request. Each file describes one connection, not a list.
+
+`--from` (origin station) and `--to` (destination station) are required, either as
+CLI options or as YAML entries.
 
 **Station names must be unambiguous.** The tool resolves the origin, destination and optional
 intermediate station using the BVG station search. If a name matches several stations and there is no unique exact
