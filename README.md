@@ -80,7 +80,7 @@ java -jar target/oepnv-victim.jar --help
 
 ### Saved connections (YAML)
 
-Save a connection in a UTF-8 YAML file, for example `commute.yml`:
+Save a connection in a UTF-8 YAML file, for example [commute.yml](commute.yml):
 
 ```yaml
 from: "Treuenbrietzen, Bahnhof"
