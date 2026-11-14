@@ -86,10 +86,10 @@ Save a connection in a UTF-8 YAML file, for example `commute.yml`:
 from: "Treuenbrietzen, Bahnhof"
 to: "Jüterbog, Bahnhof"
 via: "S Potsdam Hauptbahnhof"
-departure: "2026-11-07 9:00"
 ```
 
-Load it with `--config`:
+Load it with `--config`. This example has no saved time, so each invocation
+searches for connections departing **now**:
 
 ```sh
 java -jar target/oepnv-victim.jar --config commute.yml
@@ -100,9 +100,10 @@ java -jar target/oepnv-victim.jar --config commute.yml --to "Berlin Hauptbahnhof
 
 The supported keys are `from`, `to`, `via`, `departure` and `arrival`. Only `from`
 and `to` are required; omit the others if not needed. Use `arrival` **instead of**
-`departure` to search by arrival time. Times use the same Berlin-local format and
-validation as the CLI options below; quote them as shown. Without either time,
-the search uses departure now.
+`departure` to search by arrival time. If you want to save a fixed time, optionally
+add e.g. `departure: "2026-11-07 9:00"` or `arrival: "2026-11-07 10:00"`.
+Times use the same Berlin-local format and validation as the CLI options below;
+quote these values. Without either time, the search uses departure now.
 
 Explicit CLI options override the matching YAML keys, regardless of option order.
 Other options such as `--limit`, `--timeout` and `--json` can still be supplied on
