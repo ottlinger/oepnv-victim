@@ -88,12 +88,55 @@ class BvgClientTest {
         assertThat(requests.get(0)).startsWith("/de/verbindungen/fahrplanauskunft?");
         assertThat(requests).anyMatch((final var r) -> r.contains("input=Jüterbog, Bahnhof"));
         assertThat(requests).anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
-                && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("products=127"));
+                && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("products=95"));
         assertThat(requests.get(0)).contains("timeSel=now");
         String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
         assertThat(connectionRequest).contains("timeSel=depart");
         for (String uri : List.of(requests.get(0), connectionRequest)) {
             assertThat(uri).doesNotMatch(".*[?&]date=.*").doesNotMatch(".*[?&]time=.*");
+        }
+    }
+
+    @Test
+    void cliDefaultsToLocalTransportAndExplicitlyEnablesLongDistance() {
+        for (final String option : List.of("", "--with-fast-trains", "--with-fast-trains=false")) {
+            requests.clear();
+            final Main main = new Main((final var request, final var timeout, final var selector) ->
+                    new BvgClient(base, timeout, selector).search(request));
+            final StringWriter out = new StringWriter();
+            final List<String> args = new ArrayList<>(List.of("--from", "Treuenbrietzen", "--to", "Jüterbog"));
+            if (!option.isEmpty()) args.add(option);
+            assertThat(new CommandLine(main).setOut(new PrintWriter(out))
+                    .execute(args.toArray(String[]::new))).isZero();
+            final boolean withFastTrains = option.equals("--with-fast-trains");
+            assertThat(requests).filteredOn((final var r) -> r.startsWith("/connections?"))
+                    .hasSize(1).allSatisfy((final var r) ->
+                            assertThat(r).contains("products=" + (withFastTrains ? "127" : "95")));
+            if (withFastTrains) {
+                assertThat(out.toString()).contains("withFastTrains: true");
+            } else {
+                assertThat(out.toString()).doesNotContain("withFastTrains:");
+            }
+        }
+    }
+
+    @Test
+    void appliesTransportSelectionToBothViaSegmentsForDepartureAndArrival() throws Exception {
+        response = "{\"connections\":[" + journey("Treuenbrietzen", "Potsdam",
+                "2026-11-07T10:00:00", "2026-11-07T10:30:00", "") + "]}";
+        onwardResponse = "{\"connections\":[" + journey("Potsdam", "Jüterbog",
+                "2026-11-07T11:00:00", "2026-11-07T11:30:00", "") + "]}";
+        final LocalDateTime time = LocalDateTime.of(2026, 11, 7, 12, 0);
+        for (final boolean arrival : List.of(false, true)) {
+            for (final boolean withFastTrains : List.of(false, true)) {
+                requests.clear();
+                new BvgClient(base, Duration.ofSeconds(5)).search(new SearchRequest(
+                        "Treuenbrietzen", "Jüterbog", "Potsdam", 1,
+                        arrival ? null : time, arrival ? time : null, withFastTrains));
+                assertThat(requests).filteredOn((final var r) -> r.startsWith("/connections?"))
+                        .hasSize(2).allSatisfy((final var r) ->
+                                assertThat(r).contains("products=" + (withFastTrains ? "127" : "95")));
+            }
         }
     }
 

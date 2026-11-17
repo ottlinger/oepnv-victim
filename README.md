@@ -247,8 +247,35 @@ times and formats are rejected with exit code `2` before any network request.
 with exit code `2` before any network request. If neither is specified, the search
 uses **departure now**.
 
-The search includes all modes of transport from the example URL and real-time
-data. Times are local BVG timetable times; missing delay data is not interpreted
+### Local transport / Deutschlandticket
+
+By default, the search uses **local transport only**: regional rail, S-Bahn,
+U-Bahn, tram, bus and ferry (`products=95`). Long-distance services such as ICE,
+IC and EC are excluded, including on both segments of a `--via` journey.
+Use `--with-fast-trains` to include long-distance services as well (`products=127`):
+
+```sh
+# Local transport only (default)
+./run.sh --from "Beelitz-Heilstätten, Bahnhof" --to "Leipzig Hbf"
+
+# Also allow long-distance services
+./run.sh --from "Beelitz-Heilstätten, Bahnhof" --to "Leipzig Hbf" --with-fast-trains
+```
+
+It is **not a guarantee of Deutschlandticket validity**: special services,
+individual regional lines and ferries can have different fare rules. Check the
+operator's rules for the specific service; the API does not validate tickets.
+
+Saved YAML connections support `withFastTrains: true` to include long-distance
+services. The option is also included in the exported query YAML when enabled.
+Use `--with-fast-trains=false` to override a saved setting and return to local
+transport only. Omitted or `false` means local transport only.
+This replaces the previous `--local-transport` option and `localTransport` YAML key.
+For existing YAML files, remove `localTransport: true` to keep local transport only,
+or replace `localTransport: false` with `withFastTrains: true` to keep all modes.
+This filter does not resolve empty BVG responses for unsupported station pairs.
+
+The search includes real-time data. Times are local BVG timetable times; missing delay data is not interpreted
 as evidence that a service is on time.
 
 Example journey (times and platforms vary; CLI output remains in German):

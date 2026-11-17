@@ -46,7 +46,7 @@ public final class Main implements Callable<Integer> {
     }
 
     @Option(names = "--config", paramLabel = "FILE",
-            description = "YAML-Datei mit from, to, via, departure oder arrival; aufgelöste Stationsnamen werden gespeichert. CLI-Optionen haben Vorrang.")
+            description = "YAML-Datei mit from, to, via, departure, arrival oder withFastTrains; aufgelöste Stationsnamen werden gespeichert. CLI-Optionen haben Vorrang.")
     private Path config;
 
     @Option(names = "--from", paramLabel = "STATION",
@@ -70,6 +70,10 @@ public final class Main implements Callable<Integer> {
             converter = DepartureTimeConverter.class,
             description = "Ankunftszeit in Berlin, z. B. '2026-11-07 9:00' (Stunde ein- oder zweistellig; nicht mit --departure kombinierbar).")
     private LocalDateTime arrival;
+
+    @Option(names = "--with-fast-trains", arity = "0..1", fallbackValue = "true",
+            description = "Fernverkehr (ICE/IC/EC usw.) einschließen; Standard: nur Nahverkehr, ohne Garantie für Deutschlandticket-Gültigkeit.")
+    private boolean withFastTrains;
 
     @Option(names = "--limit", defaultValue = "5", description = "Maximale Anzahl aus der ersten Ergebnisseite (Standard: 5).")
     private int limit;
@@ -103,7 +107,7 @@ public final class Main implements Callable<Integer> {
         }
         try {
             final LocalDateTime queryTime = LocalDateTime.now(ZoneId.of("Europe/Berlin"));
-            final SearchRequest request = new SearchRequest(origin, destination, via, limit, departure, arrival);
+            final SearchRequest request = new SearchRequest(origin, destination, via, limit, departure, arrival, withFastTrains);
             final BvgClient.StationSelector selector = interactive || System.console() != null
                     ? new StationPrompt(System.console() == null
                             ? new InputStreamReader(System.in, StandardCharsets.UTF_8) : System.console().reader(),
@@ -162,6 +166,9 @@ public final class Main implements Callable<Integer> {
             if (origin == null) origin = saved.from();
             if (destination == null) destination = saved.to();
             if (via == null) via = saved.via();
+            if (!spec.commandLine().getParseResult().hasMatchedOption("--with-fast-trains")) {
+                withFastTrains = saved.withFastTrains();
+            }
             final DepartureTimeConverter converter = new DepartureTimeConverter();
             if (departure == null && saved.departure() != null) departure = converter.convert(saved.departure());
             if (arrival == null && saved.arrival() != null) arrival = converter.convert(saved.arrival());

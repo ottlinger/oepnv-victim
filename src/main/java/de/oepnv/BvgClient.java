@@ -59,30 +59,33 @@ final class BvgClient {
         final Station from = resolveStation(endpoints.locations(), request.from());
         final Station to = resolveStation(endpoints.locations(), request.to());
         final Station via = request.via() == null ? null : resolveStation(endpoints.locations(), request.via());
+        // BVG product bits: S-Bahn 1, U-Bahn 2, tram 4, bus 8, ferry 16,
+        // long-distance 32, regional rail 64.
+        final String products = request.withFastTrains() ? "127" : "95";
         final List<JsonNode> selected;
         if (via == null) {
             selected = searchConnections(endpoints.connections(), from, to,
-                    request.limit(), request.departure(), request.arrival());
+                    request.limit(), request.departure(), request.arrival(), products);
         } else if (request.arrival() != null) {
-            selected = searchViaArrival(endpoints.connections(), from, via, to, request);
+            selected = searchViaArrival(endpoints.connections(), from, via, to, request, products);
         } else {
-            selected = searchViaDeparture(endpoints.connections(), from, via, to, request);
+            selected = searchViaDeparture(endpoints.connections(), from, via, to, request, products);
         }
         return new Result(from.name(), to.name(), via == null ? null : via.name(), selected);
     }
 
     private List<JsonNode> searchViaDeparture(final URI endpoint, final Station from, final Station intermediate,
-                                             final Station to, final SearchRequest request)
+                                             final Station to, final SearchRequest request, final String products)
             throws IOException, InterruptedException {
         final List<JsonNode> preceding = searchConnections(endpoint, from, intermediate,
-                request.limit(), request.departure(), null);
+                request.limit(), request.departure(), null, products);
         final List<JsonNode> combined = new ArrayList<>();
         for (final JsonNode first : preceding) {
             final LocalDateTime ready = ViaJourney.effectiveTime(first.path("summary").path("arrival"));
             // The endpoint accepts minutes only: round up rather than request a departure before arrival.
             final LocalDateTime onwardTime = ready.getSecond() == 0 ? ready : ready.plusMinutes(1).withSecond(0);
             final List<JsonNode> onward = searchConnections(endpoint, intermediate, to,
-                    Integer.MAX_VALUE, onwardTime, null);
+                    Integer.MAX_VALUE, onwardTime, null, products);
             for (final JsonNode second : onward) {
                 if (!ViaJourney.effectiveTime(second.path("summary").path("departure")).isBefore(ready)) {
                     combined.add(ViaJourney.combine(first, second, intermediate.name()));
@@ -94,15 +97,15 @@ final class BvgClient {
     }
 
     private List<JsonNode> searchViaArrival(final URI endpoint, final Station from, final Station intermediate,
-                                           final Station to, final SearchRequest request)
+                                           final Station to, final SearchRequest request, final String products)
             throws IOException, InterruptedException {
         final List<JsonNode> onward = searchConnections(endpoint, intermediate, to,
-                request.limit(), null, request.arrival());
+                request.limit(), null, request.arrival(), products);
         final List<JsonNode> combined = new ArrayList<>();
         for (JsonNode second : onward) {
             LocalDateTime latest = ViaJourney.effectiveTime(second.path("summary").path("departure"));
             List<JsonNode> preceding = searchConnections(endpoint, from, intermediate,
-                    Integer.MAX_VALUE, null, latest.withSecond(0).withNano(0));
+                    Integer.MAX_VALUE, null, latest.withSecond(0).withNano(0), products);
             JsonNode best = null;
             for (JsonNode first : preceding) {
                 LocalDateTime ready = ViaJourney.effectiveTime(first.path("summary").path("arrival"));
@@ -118,10 +121,10 @@ final class BvgClient {
 
     private List<JsonNode> searchConnections(final URI endpoint, final Station from, final Station to,
                                             final int limit, final LocalDateTime departure,
-                                            final LocalDateTime arrival) throws IOException, InterruptedException {
+                                            final LocalDateTime arrival, final String products) throws IOException, InterruptedException {
         Map<String, String> connectionParams = new LinkedHashMap<>(Map.of(
                 "language", "de", "SID", from.id(), "ZID", to.id(),
-                "products", "127", "realtime", "true"));
+                "products", products, "realtime", "true"));
         timeParams(connectionParams, departure, arrival, "depart");
         URI connectionsUrl = query(endpoint, connectionParams);
         JsonNode response = JSON.readTree(get(connectionsUrl, "application/json"));

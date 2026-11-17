@@ -19,8 +19,12 @@ import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.Set;
 
-record JourneyConfig(String from, String to, String via, String departure, String arrival) {
-    private static final Set<String> FIELDS = Set.of("from", "to", "via", "departure", "arrival");
+record JourneyConfig(String from, String to, String via, String departure, String arrival, boolean withFastTrains) {
+    JourneyConfig(final String from, final String to, final String via, final String departure, final String arrival) {
+        this(from, to, via, departure, arrival, false);
+    }
+
+    private static final Set<String> FIELDS = Set.of("from", "to", "via", "departure", "arrival", "withFastTrains");
     private static final ObjectMapper YAML = new ObjectMapper(YAMLFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER).build())
@@ -29,7 +33,8 @@ record JourneyConfig(String from, String to, String via, String departure, Strin
     static JourneyConfig read(final Path path) throws IOException {
         final JsonNode root = readRoot(path);
         return new JourneyConfig(root.path("from").textValue(), root.path("to").textValue(),
-                root.path("via").textValue(), root.path("departure").textValue(), root.path("arrival").textValue());
+                root.path("via").textValue(), root.path("departure").textValue(), root.path("arrival").textValue(),
+                root.path("withFastTrains").asBoolean(false));
     }
 
     /** Export the effective query, using official names rather than the user's search terms. */
@@ -39,6 +44,7 @@ record JourneyConfig(String from, String to, String via, String departure, Strin
         root.put("from", result.origin());
         root.put("to", result.destination());
         if (result.via() != null) root.put("via", result.via());
+        if (request.withFastTrains()) root.put("withFastTrains", true);
         final DateTimeFormatter format = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm");
         final LocalDateTime departure = request.departure() == null && request.arrival() == null
                 ? queryTime : request.departure();
@@ -102,6 +108,12 @@ record JourneyConfig(String from, String to, String via, String departure, Strin
             final var field = fields.next();
             if (!FIELDS.contains(field.getKey())) {
                 throw new IllegalArgumentException("Unbekannter Konfigurationseintrag: " + field.getKey());
+            }
+            if (field.getKey().equals("withFastTrains")) {
+                if (!field.getValue().isBoolean()) {
+                    throw new IllegalArgumentException("Konfigurationseintrag 'withFastTrains' muss true oder false sein.");
+                }
+                continue;
             }
             if (!field.getValue().isTextual() || field.getValue().textValue().isBlank()) {
                 throw new IllegalArgumentException("Konfigurationseintrag '" + field.getKey()

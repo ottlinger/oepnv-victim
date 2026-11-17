@@ -16,6 +16,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JourneyConfigTest {
     @TempDir
@@ -78,6 +79,40 @@ class JourneyConfigTest {
         final SearchRequest request = new SearchRequest("A", "B", null, 5, null, null);
         assertThat(JourneyConfig.queryYaml(request, result, LocalDateTime.of(2026, 11, 7, 9, 0)))
                 .contains("arrival: \"YYYY-MM-DD HH:mm\"", "Platzhalter bitte ergänzen");
+    }
+
+    @Test
+    void readsWithFastTrainsAndAllowsExplicitCliOverride() throws IOException {
+        final Path file = config("from: Start\nto: Ziel\nwithFastTrains: true\n");
+        for (final boolean enabled : List.of(true, false)) {
+            final Main main = new Main((final var request, final var timeout, final var selector) -> {
+                assertThat(request.withFastTrains()).isEqualTo(enabled);
+                return new BvgClient.Result("Start", "Ziel", null, List.of());
+            });
+            final CommandLine cli = new CommandLine(main).setOut(new PrintWriter(new StringWriter()));
+            assertThat(enabled ? cli.execute("--config", file.toString())
+                    : cli.execute("--config", file.toString(), "--with-fast-trains=false")).isZero();
+        }
+        assertThat(JourneyConfig.read(file).withFastTrains()).isTrue();
+        assertThat(JourneyConfig.read(config("withFastTrains: false\n")).withFastTrains()).isFalse();
+        assertThat(JourneyConfig.read(config("from: Start\n")).withFastTrains()).isFalse();
+    }
+
+    @Test
+    void exportsAndReloadsExplicitLongDistanceSelection() throws IOException {
+        final SearchRequest request = new SearchRequest("Start", "Ziel", null, 5, null, null, true);
+        final BvgClient.Result result = new BvgClient.Result("Start", "Ziel", null, List.of());
+        final String yaml = JourneyConfig.queryYaml(request, result, LocalDateTime.of(2026, 11, 7, 9, 0));
+        assertThat(yaml).contains("withFastTrains: true");
+        assertThat(JourneyConfig.read(config(yaml)).withFastTrains()).isTrue();
+    }
+
+    @Test
+    void rejectsNonBooleanWithFastTrains() {
+        for (final String value : List.of("'true'", "1", "null", "[]")) {
+            assertThatThrownBy(() -> JourneyConfig.read(config("withFastTrains: " + value + "\n")))
+                    .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("true oder false");
+        }
     }
 
     @Test
