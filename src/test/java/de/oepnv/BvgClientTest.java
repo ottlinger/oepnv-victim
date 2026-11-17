@@ -273,6 +273,31 @@ class BvgClientTest {
     }
 
     @Test
+    void reportsEmptyObjectWithResolvedStationsInsteadOfSchemaError() {
+        response = "{}";
+        assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", null, 5, null, null)))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof",
+                        "keine Verbindungsdaten (leere Antwort)", "nicht feststellen", "Deutschen Bahn")
+                .hasMessageNotContaining("Feld 'connections'");
+    }
+
+    @Test
+    void cliReportsEmptyBvgResponseAsFailureNotAnEmptyJourneyList() {
+        response = "{}";
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request));
+        final StringWriter out = new StringWriter();
+        final StringWriter err = new StringWriter();
+        assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .execute("--from", "Treuenbrietzen", "--to", "Jüterbog", "--json")).isNotZero();
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).contains("Fehler:", "keine Verbindungsdaten (leere Antwort)")
+                .doesNotContain("Feld 'connections'");
+    }
+
+    @Test
     void reportsHttpErrors() {
         status = 503;
         assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))

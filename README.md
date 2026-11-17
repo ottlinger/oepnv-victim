@@ -34,6 +34,17 @@ of the logo and GitHub social preview.
 
 ## Usage
 
+After building, use `./run.sh` as a shortcut for `java -jar target/oepnv-victim.jar`.
+All arguments are forwarded unchanged:
+
+```sh
+./run.sh --from "Treuenbrietzen, Bahnhof" --to "Jüterbog, Bahnhof"
+./run.sh --help
+```
+
+The script also works when called from another directory; relative paths in arguments
+(such as `--config commute.yml`) remain relative to your current working directory.
+
 ```sh
 java -jar target/oepnv-victim.jar \
   --from "Treuenbrietzen, Bahnhof" \
@@ -77,6 +88,14 @@ java -jar target/oepnv-victim.jar --from "Treuenbrietzen, Bahnhof" --to "Jüterb
 
 java -jar target/oepnv-victim.jar --help
 ```
+
+### Empty responses from BVG
+
+Some station pairs can be selected in the station search, but the BVG connection
+endpoint returns only an empty object (`{}`). This was observed for
+Beelitz-Heilstätten → Altenburg. The application reports this as unavailable
+connection data, not as proof that no journey exists. Check another journey
+planner, such as Deutsche Bahn, for these routes.
 
 ### Saved connections (YAML)
 

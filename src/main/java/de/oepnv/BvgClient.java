@@ -125,6 +125,12 @@ final class BvgClient {
         timeParams(connectionParams, departure, arrival, "depart");
         URI connectionsUrl = query(endpoint, connectionParams);
         JsonNode response = JSON.readTree(get(connectionsUrl, "application/json"));
+        if (response.isObject() && response.isEmpty()) {
+            throw new IOException("Die BVG-Auskunft liefert für '" + from.name() + "' → '" + to.name()
+                    + "' keine Verbindungsdaten (leere Antwort). "
+                    + "Ob eine Verbindung existiert, lässt sich damit nicht feststellen. "
+                    + "Bitte die Strecke in einer anderen Reiseauskunft prüfen, z. B. bei der Deutschen Bahn.");
+        }
         JsonNode connections = response.path("connections");
         if (!connections.isArray()) {
             throw new IOException("Unerwartete BVG-Antwort: Das Feld 'connections' fehlt oder ist keine Liste.");
