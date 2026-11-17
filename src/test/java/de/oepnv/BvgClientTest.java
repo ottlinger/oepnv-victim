@@ -362,6 +362,43 @@ class BvgClientTest {
     }
 
     @Test
+    void printsSelectedStationBelowJourneysAsReusableYaml(@TempDir final Path directory) throws Exception {
+        viaLocations = """
+                [{"type":"HST","name":"Potsdam A","id":"wrong"},
+                 {"type":"HST","name":"Potsdam B","id":"via-id"}]
+                """;
+        response = "{\"connections\":[" + journey("Treuenbrietzen", "Potsdam B",
+                "2026-11-07T15:00:00", "2026-11-07T15:30:00", "") + "]}";
+        onwardResponse = "{\"connections\":[" + journey("Potsdam B", "Jüterbog",
+                "2026-11-07T15:40:00", "2026-11-07T16:00:00", "") + "]}";
+        final Main.JourneySearch search = (final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request);
+        final StringWriter out = new StringWriter();
+        final StringWriter err = new StringWriter();
+        assertThat(executeWithInput(new CommandLine(new Main(search)).setOut(new PrintWriter(out))
+                .setErr(new PrintWriter(err)), "2\n", "--from", "Treuenbrietzen", "--to", "Jüterbog",
+                "--via", "Potsdam", "--departure", "2026-11-07 15:00", "--interactive")).isZero();
+        final int yamlStart = out.toString().indexOf("# Aktuelle Abfrage als YAML");
+        assertThat(yamlStart).isGreaterThan(out.toString().indexOf("Verbindung 1:"));
+        final String yaml = out.toString().substring(yamlStart);
+        final Path config = Files.writeString(directory.resolve("copied.yml"), yaml);
+        assertThat(JourneyConfig.read(config)).isEqualTo(new JourneyConfig(
+                "Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", "Potsdam B", "2026-11-07 15:00", "2026-11-07 16:00"));
+        assertThat(yaml).contains("# Bitte zwischen Abfahrtszeit", "entfernen oder auskommentieren")
+                .doesNotContain("Potsdam A", "via-id", "SID=", "Übernommen:");
+        final StringWriter conflictErr = new StringWriter();
+        assertThat(new CommandLine(new Main(search)).setErr(new PrintWriter(conflictErr))
+                .execute("--config", config.toString())).isEqualTo(2);
+        assertThat(conflictErr.toString()).contains("--departure und --arrival");
+        // Follow the exported comment: select departure by commenting out arrival.
+        Files.writeString(config, yaml.replace("\narrival:", "\n# arrival:"));
+        final StringWriter repeatErr = new StringWriter();
+        assertThat(new CommandLine(new Main(search)).setOut(new PrintWriter(new StringWriter()))
+                .setErr(new PrintWriter(repeatErr)).execute("--config", config.toString())).isZero();
+        assertThat(repeatErr.toString()).isEmpty();
+    }
+
+    @Test
     void savesInteractiveSelectionToYamlAndReusesItWithoutPrompt(@TempDir final Path directory) throws Exception {
         final Path config = Files.writeString(directory.resolve("journey.yml"), """
                 from: Treuenbrietzen

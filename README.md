@@ -80,6 +80,38 @@ java -jar target/oepnv-victim.jar --help
 
 ### Saved connections (YAML)
 
+After every successful text-mode search, a copyable YAML block appears below the
+journeys (also when no journeys were found):
+
+```yaml
+# Aktuelle Abfrage als YAML (zum Speichern):
+from: "Beelitz, Stadt Bhf."
+to: "Jüterbog, Bahnhof"
+via: "S Potsdam Hauptbahnhof"
+# Bitte zwischen Abfahrtszeit (departure) und Ankunftszeit (arrival) entscheiden,
+# damit die Anfrage sinnvoll ist: genau eine Zeitangabe behalten, die andere entfernen oder auskommentieren.
+# Die zusätzliche Zeit stammt aus der ersten Verbindung (Fahrplanzeit); Platzhalter bitte ergänzen.
+departure: "2026-11-07 15:22"
+arrival: "2026-11-07 16:00"
+```
+
+The block uses the resolved official BVG names, including any stations chosen in the
+interactive selection. Copy it into a `.yml` file, then **remove or comment out one of
+`departure` and `arrival`** before reusing it with `--config`. Both fields are shown so
+you can choose departure-based or arrival-based planning; keeping both is rejected.
+A YAML comment immediately above them explains this choice.
+
+The station entries reflect the effective query after merging YAML and CLI options,
+including CLI overrides. `via` is omitted when not specified. The requested time is
+preserved. For searches from **now**, `departure` is the query's start time in Berlin
+(rounded down to minutes). The additional time is the scheduled departure/arrival of
+the **first** result, not a combination of different journeys or a delay-adjusted time.
+If no result or no valid additional time is available, `YYYY-MM-DD HH:mm` is shown as
+a placeholder to fill in or remove. Remove both time entries to search from **now** again.
+Only the supported journey
+configuration keys are exported, not `--limit`, `--timeout` or output options.
+`--json` remains JSON-only and does not append YAML.
+
 Save a connection in a UTF-8 YAML file, for example [commute.yml](commute.yml):
 
 ```yaml

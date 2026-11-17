@@ -26,6 +26,61 @@ class JourneyConfigTest {
     }
 
     @Test
+    void exportsResolvedNamesAndConcreteQueryTimeWhenNoTimeWasSpecified() throws IOException {
+        final SearchRequest request = new SearchRequest("Beelitz", "Berlin", null, 2, null, null);
+        final BvgClient.Result result = new BvgClient.Result(
+                "Beelitz, Stadt Bhf.", "Berlin: Halt #1 \"Nord\"\\Süd\nBahnsteig", null, List.of());
+        final String yaml = JourneyConfig.queryYaml(request, result, LocalDateTime.of(2026, 11, 7, 9, 15, 42));
+        assertThat(JourneyConfig.read(config(yaml))).isEqualTo(new JourneyConfig(
+                result.origin(), result.destination(), null, "2026-11-07 09:15", "YYYY-MM-DD HH:mm"));
+        assertThat(yaml).contains("# Bitte zwischen Abfahrtszeit", "entfernen oder auskommentieren")
+                .doesNotContain("via:", "limit:", "timeout:", "null");
+        assertThat(yaml.indexOf("# Bitte zwischen")).isLessThan(yaml.indexOf("departure:"));
+    }
+
+    @Test
+    void exportsViaAndRequestedTimeRatherThanJourneyTimes() throws IOException {
+        final LocalDateTime time = LocalDateTime.of(2026, 11, 7, 9, 15);
+        final BvgClient.Result result = new BvgClient.Result("Start", "Ziel", "Ausgewählte Station", List.of());
+        for (final boolean arrival : List.of(false, true)) {
+            final SearchRequest request = new SearchRequest("A", "B", "Suchbegriff", 5,
+                    arrival ? null : time, arrival ? time : null);
+            final String yaml = JourneyConfig.queryYaml(request, result, time.plusDays(1));
+            assertThat(JourneyConfig.read(config(yaml))).isEqualTo(new JourneyConfig(
+                    "Start", "Ziel", "Ausgewählte Station",
+                    arrival ? "YYYY-MM-DD HH:mm" : "2026-11-07 09:15",
+                    arrival ? "2026-11-07 09:15" : "YYYY-MM-DD HH:mm"));
+        }
+    }
+
+    @Test
+    void usesFirstJourneyForTheAdditionalTimeAcrossMidnight() throws IOException {
+        final var connection = BvgClient.JSON.readTree("""
+                {"summary":{"departure":{"date":"2026-11-07","time":"23:50:00"},
+                            "arrival":{"date":"2026-11-08","time":"00:30:00"}}}
+                """);
+        final BvgClient.Result result = new BvgClient.Result("Start", "Ziel", null, List.of(connection));
+        final LocalDateTime queryTime = LocalDateTime.of(2026, 11, 1, 12, 0);
+        final SearchRequest departure = new SearchRequest("A", "B", null, 5,
+                LocalDateTime.of(2026, 11, 7, 23, 45), null);
+        assertThat(JourneyConfig.read(config(JourneyConfig.queryYaml(departure, result, queryTime))))
+                .isEqualTo(new JourneyConfig("Start", "Ziel", null, "2026-11-07 23:45", "2026-11-08 00:30"));
+        final SearchRequest arrival = new SearchRequest("A", "B", null, 5,
+                null, LocalDateTime.of(2026, 11, 8, 0, 40));
+        assertThat(JourneyConfig.read(config(JourneyConfig.queryYaml(arrival, result, queryTime))))
+                .isEqualTo(new JourneyConfig("Start", "Ziel", null, "2026-11-07 23:50", "2026-11-08 00:40"));
+    }
+
+    @Test
+    void usesPlaceholderWhenAdditionalResultTimeIsMissing() throws IOException {
+        final BvgClient.Result result = new BvgClient.Result("Start", "Ziel", null,
+                List.of(BvgClient.JSON.readTree("{\"summary\":{}}")));
+        final SearchRequest request = new SearchRequest("A", "B", null, 5, null, null);
+        assertThat(JourneyConfig.queryYaml(request, result, LocalDateTime.of(2026, 11, 7, 9, 0)))
+                .contains("arrival: \"YYYY-MM-DD HH:mm\"", "Platzhalter bitte ergänzen");
+    }
+
+    @Test
     void readsMinimalConnectionWithDefaults() throws IOException {
         final Path file = config("# Saved connection\nfrom: Treuenbrietzen\nto: Jüterbog\n");
         final Main main = new Main((final var request, final var timeout, final var selector) -> {

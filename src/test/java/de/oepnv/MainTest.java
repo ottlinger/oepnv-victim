@@ -9,6 +9,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +49,13 @@ class MainTest {
                 "Via:   S Potsdam Hauptbahnhof", "Verbindung 1:", "Verbindung 2:", " | Gesamt: 18 Min.",
                 CommandLine.Help.Ansi.ON.string("@|bold 2026-11-07 12:29|@"))
                 .doesNotContain("https://", "BVG:");
+        final String yaml = out.toString().substring(out.toString().indexOf("# Aktuelle Abfrage als YAML"));
+        assertThat(out.toString().indexOf("# Aktuelle Abfrage als YAML"))
+                .isGreaterThan(out.toString().indexOf("Verbindung 2:"));
+        assertThat(yaml).contains("from: \"Treuenbrietzen, Bahnhof\"", "to: \"Jüterbog, Bahnhof\"",
+                "via: \"S Potsdam Hauptbahnhof\"", "departure: \"2026-11-07 15:22\"",
+                "arrival: \"2026-11-07 12:47\"", "# Bitte zwischen Abfahrtszeit")
+                .doesNotContain("\u001B");
         assertThat(err.toString()).isEmpty();
     }
 
@@ -63,7 +73,7 @@ class MainTest {
         assertThat(json.isArray()).isTrue();
         assertThat(json).hasSize(1);
         assertThat(json.get(0)).isEqualTo(connection);
-        assertThat(out.toString()).doesNotContain("\u001B", "Start:");
+        assertThat(out.toString()).doesNotContain("\u001B", "Start:", "Aktuelle Abfrage", "from:");
         assertThat(err.toString()).isEmpty();
     }
 
@@ -75,8 +85,16 @@ class MainTest {
             assertThat(timeout).isEqualTo(Duration.ofSeconds(30));
             return new BvgClient.Result(request.from(), request.to(), null, List.of());
         });
+        final LocalDateTime before = LocalDateTime.now(ZoneId.of("Europe/Berlin")).truncatedTo(ChronoUnit.MINUTES);
         assertThat(new CommandLine(main).setOut(new PrintWriter(out)).execute("--from", "A", "--to", "B")).isZero();
-        assertThat(out.toString()).contains("Keine Verbindungen gefunden.").doesNotContain("Via:", "Verbindung 1:");
+        final LocalDateTime after = LocalDateTime.now(ZoneId.of("Europe/Berlin")).truncatedTo(ChronoUnit.MINUTES);
+        assertThat(out.toString()).contains("Keine Verbindungen gefunden.", "# Aktuelle Abfrage als YAML", "from:", "to:",
+                        "departure:", "arrival: \"YYYY-MM-DD HH:mm\"", "# Bitte zwischen Abfahrtszeit")
+                .doesNotContain("Via:", "Verbindung 1:", "via:");
+        final String savedDeparture = out.toString().lines().filter((final var line) -> line.startsWith("departure:"))
+                .findFirst().orElseThrow().substring("departure:".length()).strip().replace("\"", "");
+        assertThat(LocalDateTime.parse(savedDeparture, DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")))
+                .isBetween(before, after);
     }
 
     @Test

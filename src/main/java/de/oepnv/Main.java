@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
@@ -101,6 +102,7 @@ public final class Main implements Callable<Integer> {
                     "--departure und --arrival dürfen nicht gemeinsam angegeben werden.");
         }
         try {
+            final LocalDateTime queryTime = LocalDateTime.now(ZoneId.of("Europe/Berlin"));
             final SearchRequest request = new SearchRequest(origin, destination, via, limit, departure, arrival);
             final BvgClient.StationSelector selector = interactive || System.console() != null
                     ? new StationPrompt(System.console() == null
@@ -124,6 +126,10 @@ public final class Main implements Callable<Integer> {
                     spec.commandLine().getOut().println(ConnectionFormatter.format(index++, connection,
                             spec.commandLine().getColorScheme().ansi()));
                 }
+                spec.commandLine().getOut().println();
+                spec.commandLine().getOut().println("# Aktuelle Abfrage als YAML (zum Speichern):");
+                spec.commandLine().getOut().print(JourneyConfig.queryYaml(request, result, queryTime));
+                spec.commandLine().getOut().flush();
             }
             return 0;
         } catch (final InterruptedException e) {
