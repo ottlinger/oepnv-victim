@@ -156,7 +156,9 @@ class BvgClientTest {
         final StringWriter err = new StringWriter();
         assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
                 .execute("--config", config.toString(), "--json")).as("%s", err).isZero();
-        assertThat(err.toString()).isEmpty();
+        assertThat(err.toString()).contains("Stationsnamen gespeichert in:");
+        assertThat(JourneyConfig.read(config)).isEqualTo(new JourneyConfig(
+                "Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", null, null, "2026-11-07 9:00"));
         assertThat(BvgClient.JSON.readTree(out.toString())).isNotEmpty();
         assertThat(requests).hasSize(4);
         assertThat(requests.get(3)).contains("timeSel=arrive", "date=2026-11-07", "time=09:00");
@@ -359,6 +361,38 @@ class BvgClientTest {
         assertThat(requests).anyMatch((final var r) -> r.contains("ZID=via-id"))
                 .anyMatch((final var r) -> r.contains("SID=via-id"))
                 .noneMatch((final var r) -> r.contains("SID=wrong") || r.contains("ZID=wrong"));
+    }
+
+    @Test
+    void savesInteractiveSelectionToYamlAndReusesItWithoutPrompt(@TempDir final Path directory) throws Exception {
+        final Path config = Files.writeString(directory.resolve("journey.yml"), """
+                from: Treuenbrietzen
+                to: Jüterbog
+                via: Potsdam
+                arrival: '2026-11-07 16:00'
+                """);
+        viaLocations = """
+                [{"type":"HST","name":"Potsdam A","id":"wrong"},
+                 {"type":"HST","name":"Potsdam B","id":"via-id"}]
+                """;
+        onwardResponse = "{\"connections\":[]}";
+        final StringWriter err = new StringWriter();
+        final Main main = new Main((final var origin, final var destination, final var limit,
+                                    final var departure, final var arrival, final var via, final var timeout) ->
+                new BvgClient(base, timeout, new StationPrompt(new StringReader("2\n"), new PrintWriter(err)))
+                        .search(origin, destination, limit, departure, arrival, via));
+        assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(err))
+                .execute("--config", config.toString(), "--interactive")).isZero();
+        assertThat(JourneyConfig.read(config)).isEqualTo(new JourneyConfig(
+                "Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", "Potsdam B", null, "2026-11-07 16:00"));
+        assertThat(err.toString()).contains("Übernommen: Potsdam B", "Stationsnamen gespeichert in:");
+        final Main repeat = new Main((final var origin, final var destination, final var limit,
+                                      final var departure, final var arrival, final var via, final var timeout) ->
+                new BvgClient(base, timeout).search(origin, destination, limit, departure, arrival, via));
+        final StringWriter repeatErr = new StringWriter();
+        assertThat(new CommandLine(repeat).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(repeatErr))
+                .execute("--config", config.toString())).isZero();
+        assertThat(repeatErr.toString()).isEmpty();
     }
 
     @Test

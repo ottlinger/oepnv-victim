@@ -139,8 +139,19 @@ pass `--interactive` to enable selection via stdin:
 java -jar target/oepnv-victim.jar --from "Beelitz" --to "Jüterbog" --interactive
 ```
 
-Selections are used for that invocation only; YAML files are not changed. To reuse a
-selection, copy the displayed official name into your saved configuration.
+When using `--config`, successfully resolved station names (including interactive selections)
+are saved back to the supplied YAML file after the search succeeds, even if no journeys
+were found. For example, `via: Potsdam` becomes `via: "Potsdam B"` when that station is
+selected. Subsequent invocations can use the full name without selecting it again,
+provided BVG returns a unique match.
+
+Only existing `from`, `to` and `via` entries loaded from YAML are updated. Stations
+overridden with CLI options are not written back, missing keys are not added, and saved
+`departure`/`arrival` values remain unchanged. Failed searches or cancelled selections
+leave the file untouched. A confirmation is written to stderr when names change;
+unchanged files are not rewritten. Updates replace the file atomically. YAML formatting
+may change and comments are not retained when a file is updated. Without `--config`,
+selections apply only to the current invocation.
 
 `--via` optionally requires a journey through one intermediate station. The same
 unambiguous-name rules apply as for `--from` and `--to`. Without `--via`, journeys

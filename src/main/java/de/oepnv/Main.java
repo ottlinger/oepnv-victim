@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 @Command(name = "oepnv-victim", mixinStandardHelpOptions = true, version = "0.1.0",
@@ -43,7 +45,7 @@ public final class Main implements Callable<Integer> {
     }
 
     @Option(names = "--config", paramLabel = "FILE",
-            description = "YAML-Datei mit from, to, via, departure oder arrival; CLI-Optionen haben Vorrang.")
+            description = "YAML-Datei mit from, to, via, departure oder arrival; aufgelöste Stationsnamen werden gespeichert. CLI-Optionen haben Vorrang.")
     private Path config;
 
     @Option(names = "--from", paramLabel = "STATION",
@@ -111,6 +113,7 @@ public final class Main implements Callable<Integer> {
             } else {
                 result = search.search(origin, destination, limit, departure, arrival, via, Duration.ofSeconds(timeout));
             }
+            updateConfig(result);
             if (json) {
                 spec.commandLine().getOut().println(BvgClient.JSON.writerWithDefaultPrettyPrinter()
                         .writeValueAsString(result.connections()));
@@ -135,6 +138,19 @@ public final class Main implements Callable<Integer> {
         } catch (final Exception e) {
             spec.commandLine().getErr().println("Fehler: " + e.getMessage());
             return 1;
+        }
+    }
+
+    private void updateConfig(final BvgClient.Result result) throws IOException {
+        if (config == null) return;
+        final Map<String, String> stations = new LinkedHashMap<>();
+        if (!spec.commandLine().getParseResult().hasMatchedOption("--from")) stations.put("from", result.origin());
+        if (!spec.commandLine().getParseResult().hasMatchedOption("--to")) stations.put("to", result.destination());
+        if (result.via() != null && !spec.commandLine().getParseResult().hasMatchedOption("--via")) {
+            stations.put("via", result.via());
+        }
+        if (JourneyConfig.updateStations(config, stations)) {
+            spec.commandLine().getErr().println("Stationsnamen gespeichert in: " + config);
         }
     }
 

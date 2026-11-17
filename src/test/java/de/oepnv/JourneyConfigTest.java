@@ -99,6 +99,50 @@ class JourneyConfigTest {
     }
 
     @Test
+    void savesOnlyYamlStationsAndKeepsTimeValues() throws IOException {
+        final Path file = config("from: saved\nto: saved\nvia: saved\narrival: '2026-11-07 9:00'\n");
+        final Main main = new Main((final var from, final var to, final var limit,
+                                    final var departure, final var arrival, final var via, final var timeout) ->
+                new BvgClient.Result("CLI Start", "Resolved destination", "CLI Via",
+                        URI.create("https://example.org"), List.of()));
+        final StringWriter out = new StringWriter();
+        final StringWriter err = new StringWriter();
+        assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .execute("--config", file.toString(), "--from", "Override", "--via", "Override", "--json")).isZero();
+        assertThat(JourneyConfig.read(file)).isEqualTo(new JourneyConfig(
+                "saved", "Resolved destination", "saved", null, "2026-11-07 9:00"));
+        assertThat(out.toString().strip()).isEqualTo("[ ]");
+        assertThat(err.toString()).contains("Stationsnamen gespeichert in:");
+    }
+
+    @Test
+    void doesNotAddCliOnlyStationsOrRewriteUnchangedFile() throws IOException {
+        final String original = "# Keep this comment\nfrom: A\n";
+        final Path file = config(original);
+        final Main main = new Main((final var from, final var to, final var limit,
+                                    final var departure, final var arrival, final var via, final var timeout) ->
+                new BvgClient.Result("A", "Resolved B", "Resolved C", URI.create("https://example.org"), List.of()));
+        final StringWriter err = new StringWriter();
+        assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(err))
+                .execute("--config", file.toString(), "--to", "B", "--via", "C")).isZero();
+        assertThat(Files.readString(file)).isEqualTo(original);
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void failedSearchDoesNotModifyConfig() throws IOException {
+        final String original = "# Keep this comment\nfrom: A\nto: B\n";
+        final Path file = config(original);
+        final Main main = new Main((final var from, final var to, final var limit,
+                                    final var departure, final var arrival, final var via, final var timeout) -> {
+            throw new IOException("Stationsauswahl abgebrochen");
+        });
+        assertThat(new CommandLine(main).setErr(new PrintWriter(new StringWriter()))
+                .execute("--config", file.toString())).isEqualTo(1);
+        assertThat(Files.readString(file)).isEqualTo(original);
+    }
+
+    @Test
     void rejectsInvalidFilesBeforeSearching() throws IOException {
         for (final String yaml : List.of("", "---\n", "[]", "a string", "from: [", "{}", "from: A", "to: B",
                 "from: ''\nto: B", "from: A\nto: ' '", "from: A\nto: B\nvia: null",

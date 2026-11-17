@@ -12,7 +12,15 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            maven-wrapper: ./mvnw
+          - os: windows-latest
+            maven-wrapper: .\mvnw.cmd
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v7
@@ -23,7 +31,7 @@ jobs:
           distribution: 'temurin'
           cache: maven
       - name: Build with Maven
-        run: ./mvnw -B
+        run: ${{ matrix.maven-wrapper }} -B
       - name: Code coverage with codecov
         uses: codecov/codecov-action@v7
         with:
