@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -28,12 +29,22 @@ final class BvgClient {
     private final URI base;
     private final Duration timeout;
     private final HttpClient http;
+    private final StationSelector stationSelector;
 
     BvgClient(final Duration timeout) {
         this(URI.create("https://www.bvg.de"), timeout);
     }
 
     BvgClient(final URI base, final Duration timeout) {
+        this(base, timeout, BvgClient::ambiguousStation);
+    }
+
+    BvgClient(final Duration timeout, final StationSelector stationSelector) {
+        this(URI.create("https://www.bvg.de"), timeout, stationSelector);
+    }
+
+    BvgClient(final URI base, final Duration timeout, final StationSelector stationSelector) {
+        this.stationSelector = stationSelector;
         this.base = base;
         this.timeout = timeout;
         this.http = HttpClient.newBuilder().connectTimeout(timeout)
@@ -167,10 +178,16 @@ final class BvgClient {
     }
 
     private Station resolveStation(final URI endpoint, final String name) throws IOException, InterruptedException {
-        return selectStation(JSON.readTree(get(query(endpoint, Map.of("input", name)), "application/json")), name);
+        return selectStation(JSON.readTree(get(query(endpoint, Map.of("input", name)), "application/json")),
+                name, stationSelector);
     }
 
     static Station selectStation(final JsonNode locations, final String input) throws IOException {
+        return selectStation(locations, input, BvgClient::ambiguousStation);
+    }
+
+    static Station selectStation(final JsonNode locations, final String input, final StationSelector selector)
+            throws IOException {
         if (!locations.isArray()) throw new IOException("Unerwartete BVG-Antwort bei der Bahnhofssuche.");
         List<Station> candidates = new ArrayList<>();
         for (JsonNode location : locations) {
@@ -182,10 +199,30 @@ final class BvgClient {
         }
         List<Station> exact = candidates.stream().filter((final var s) -> s.name().equalsIgnoreCase(input.strip())).toList();
         if (exact.size() == 1) return exact.get(0);
-        if (exact.isEmpty() && candidates.size() == 1) return candidates.get(0);
+        if (candidates.size() == 1) return candidates.get(0);
         if (candidates.isEmpty()) throw new IOException("Kein Bahnhof gefunden für '" + input + "'.");
-        throw new IOException("Bahnhof '" + input + "' ist nicht eindeutig. Bitte einen vollständigen Namen verwenden: "
+        final String normalized = normalizeStationName(input);
+        final List<Station> matching = candidates.stream()
+                .filter((final var station) -> normalizeStationName(station.name()).equals(normalized)).toList();
+        if (matching.size() == 1) return matching.get(0);
+        // Never guess between distinct station IDs, even when their names are identical.
+        return selector.select(input, List.copyOf(matching.isEmpty() ? candidates : matching));
+    }
+
+    private static String normalizeStationName(final String name) {
+        return name.toLowerCase(Locale.ROOT).replaceAll("[\\p{P}\\s\\p{Z}]+", " ").strip()
+                .replaceAll("\\bbhf\\b", "bahnhof").replaceAll("\\bhbf\\b", "hauptbahnhof");
+    }
+
+    static Station ambiguousStation(final String input, final List<Station> candidates) throws IOException {
+        throw new IOException("Bahnhof '" + input + "' ist nicht eindeutig. Bitte einen vollständigen Namen verwenden "
+                + "oder mit --interactive auswählen: "
                 + candidates.stream().map(Station::name).collect(Collectors.joining("; ")));
+    }
+
+    @FunctionalInterface
+    interface StationSelector {
+        Station select(final String input, final List<Station> candidates) throws IOException;
     }
 
     static Endpoints parseEndpoints(final String html, final URI base) throws IOException {

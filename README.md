@@ -117,12 +117,30 @@ before any network request. Each file describes one connection, not a list.
 `--from` (origin station) and `--to` (destination station) are required, either as
 CLI options or as YAML entries.
 
-**Station names must be unambiguous.** The tool resolves the origin, destination and optional
-intermediate station using the BVG station search. If a name matches several stations and there is no unique exact
-match, it stops and prints a list of possible stations returned by that search to
-stderr (exit code `1`); it does not simply select the first result. Run the command
-again using the full name of the intended station from the list, for example
-`--to "Jüterbog, Bahnhof"` rather than a broad search such as `--to "Jüterbog"`.
+**Station resolution and selection.** The tool resolves the origin, destination and optional
+intermediate station using the BVG station search. A unique exact match takes precedence.
+Otherwise, it recognises differences in case, punctuation, whitespace and the abbreviations
+`Bhf.`/`Bahnhof` and `Hbf.`/`Hauptbahnhof`. For example, `Beelitz Stadt Bhf.` matches
+`Beelitz, Stadt Bhf.` even when BVG returns other suggestions. A single station suggestion
+is also accepted automatically. It never just picks the first of several ambiguous results.
+
+If several stations still match, an interactive terminal offers a numbered selection.
+The selected official BVG name and station ID are used immediately for the current search;
+this works independently for `--from`, `--to` and `--via`. Enter an empty line or end input
+to cancel (exit code `1`). Prompts and selection confirmations go to stderr, so `--json`
+output on stdout remains valid JSON. The selection list displays station names only;
+BVG station IDs are kept internally for the journey search.
+
+Without a detected terminal (e.g. scripts), ambiguous names produce a list on stderr
+and exit code `1`, without reading input. Use a full name from the list or explicitly
+pass `--interactive` to enable selection via stdin:
+
+```sh
+java -jar target/oepnv-victim.jar --from "Beelitz" --to "Jüterbog" --interactive
+```
+
+Selections are used for that invocation only; YAML files are not changed. To reuse a
+selection, copy the displayed official name into your saved configuration.
 
 `--via` optionally requires a journey through one intermediate station. The same
 unambiguous-name rules apply as for `--from` and `--to`. Without `--via`, journeys

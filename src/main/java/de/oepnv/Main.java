@@ -9,6 +9,8 @@ import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -19,15 +21,14 @@ import java.util.concurrent.Callable;
 
 @Command(name = "oepnv-victim", mixinStandardHelpOptions = true, version = "0.1.0",
         description = "BVG-Verbindungen inklusive Teilstrecken, Gleisen und Verspätungen.",
-        footer = "Stationen müssen eindeutig sein. Bei mehrdeutigen Namen gibt das Tool eine Liste möglicher "
-                + "Stationen aus der BVG-Stationssuche aus; bitte mit einem vollständigen Namen erneut aufrufen.")
+        footer = "Stationen müssen eindeutig sein. Schreibvarianten werden automatisch erkannt. Bei mehrdeutigen "
+                + "Namen bietet die BVG-Stationssuche im Terminal eine Auswahl; ohne Terminal --interactive verwenden "
+                + "oder mit einem vollständigen Namen erneut aufrufen.")
 public final class Main implements Callable<Integer> {
     private final JourneySearch search;
 
     public Main() {
-        this((final var origin, final var destination, final var limit,
-              final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient(timeout).search(origin, destination, limit, departure, arrival, via));
+        this(null);
     }
 
     Main(final JourneySearch search) {
@@ -73,6 +74,9 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--json", description = "Verbindungen mit allen gelieferten Details als JSON ausgeben.")
     private boolean json;
 
+    @Option(names = "--interactive", description = "Stationsauswahl auch ohne erkanntes Terminal anbieten (Eingabe über stdin).")
+    private boolean interactive;
+
     @Option(names = "--timeout", defaultValue = "30", description = "Zeitlimit pro HTTP-Anfrage in Sekunden (Standard: 30).")
     private int timeout;
 
@@ -95,7 +99,18 @@ public final class Main implements Callable<Integer> {
                     "--departure und --arrival dürfen nicht gemeinsam angegeben werden.");
         }
         try {
-            BvgClient.Result result = search.search(origin, destination, limit, departure, arrival, via, Duration.ofSeconds(timeout));
+            final BvgClient.Result result;
+            if (search == null) {
+                final BvgClient.StationSelector selector = interactive || System.console() != null
+                        ? new StationPrompt(System.console() == null
+                                ? new InputStreamReader(System.in, StandardCharsets.UTF_8) : System.console().reader(),
+                                spec.commandLine().getErr())
+                        : BvgClient::ambiguousStation;
+                result = new BvgClient(Duration.ofSeconds(timeout), selector)
+                        .search(origin, destination, limit, departure, arrival, via);
+            } else {
+                result = search.search(origin, destination, limit, departure, arrival, via, Duration.ofSeconds(timeout));
+            }
             if (json) {
                 spec.commandLine().getOut().println(BvgClient.JSON.writerWithDefaultPrettyPrinter()
                         .writeValueAsString(result.connections()));

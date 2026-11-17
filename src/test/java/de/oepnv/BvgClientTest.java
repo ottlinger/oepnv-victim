@@ -11,6 +11,7 @@ import picocli.CommandLine;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.io.StringReader;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -300,6 +301,91 @@ class BvgClientTest {
                 .isInstanceOf(IOException.class);
         assertThatThrownBy(() -> BvgClient.parseEndpoints("<script id='__NEXT_DATA__'>{}</script>", base))
                 .isInstanceOf(IOException.class);
+    }
+
+    @Test
+    void normalizesPunctuationWhitespaceAndCommonStationAbbreviations() throws Exception {
+        final var locations = BvgClient.JSON.readTree("""
+                [{"type":"HST","name":"Beelitz, Heilstätten Bhf.","id":"other"},
+                 {"type":"HST","name":"Beelitz, Stadt Bhf.","id":"stadt"},
+                 {"type":"HST","name":"Beelitz, Stadt Bhf.","id":"stadt"}]
+                """);
+        for (final String name : List.of("Beelitz Stadt Bhf.", " BEELITZ   Stadt Bahnhof ", "Beelitz, Stadt Bhf.")) {
+            assertThat(BvgClient.selectStation(locations, name).id()).isEqualTo("stadt");
+        }
+        final var mainStations = BvgClient.JSON.readTree("""
+                [{"type":"HST","name":"Berlin Hauptbahnhof","id":"main"},
+                 {"type":"HST","name":"Berlin Ostbahnhof","id":"east"}]
+                """);
+        assertThat(BvgClient.selectStation(mainStations, "Berlin Hbf.").id()).isEqualTo("main");
+    }
+
+    @Test
+    void doesNotGuessBetweenDifferentIdsWithEquivalentNames() throws Exception {
+        final var locations = BvgClient.JSON.readTree("""
+                [{"type":"HST","name":"Beelitz, Stadt Bhf.","id":"a"},
+                 {"type":"HST","name":"Beelitz Stadt Bahnhof","id":"b"}]
+                """);
+        assertThatThrownBy(() -> BvgClient.selectStation(locations, "Beelitz Stadt Bhf"))
+                .isInstanceOf(IOException.class).hasMessageContaining("--interactive");
+        assertThat(BvgClient.selectStation(locations, "Beelitz Stadt Bahnhof").id()).isEqualTo("b");
+        final var sameNames = BvgClient.JSON.readTree(locations.toString()
+                .replace("Beelitz Stadt Bahnhof", "Beelitz, Stadt Bhf."));
+        assertThatThrownBy(() -> BvgClient.selectStation(sameNames, "Beelitz, Stadt Bhf."))
+                .isInstanceOf(IOException.class).hasMessageContaining("nicht eindeutig");
+    }
+
+    @Test
+    void interactiveSelectionPassesChosenIdToJourneySearchAndKeepsJsonClean() throws Exception {
+        viaLocations = """
+                [{"type":"HST","name":"Potsdam A","id":"wrong"},
+                 {"type":"HST","name":"Potsdam B","id":"via-id"}]
+                """;
+        response = "{\"connections\":[" + journey("Treuenbrietzen", "Potsdam B",
+                "2026-11-07T15:00:00", "2026-11-07T15:30:00", "") + "]}";
+        onwardResponse = "{\"connections\":[" + journey("Potsdam B", "Jüterbog",
+                "2026-11-07T15:40:00", "2026-11-07T16:00:00", "") + "]}";
+        final StringWriter out = new StringWriter();
+        final StringWriter err = new StringWriter();
+        final StationPrompt prompt = new StationPrompt(new StringReader("2\n"), new PrintWriter(err));
+        final Main main = new Main((final var origin, final var destination, final var limit,
+                                    final var departure, final var arrival, final var via, final var timeout) ->
+                new BvgClient(base, timeout, prompt).search(origin, destination, limit, departure, arrival, via));
+        assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .execute("--from", "Treuenbrietzen", "--to", "Jüterbog", "--via", "Potsdam", "--json", "--interactive"))
+                .isZero();
+        assertThat(BvgClient.JSON.readTree(out.toString()).get(0).path("via").asText()).isEqualTo("Potsdam B");
+        assertThat(err.toString()).contains("1) Potsdam A", "2) Potsdam B", "Übernommen: Potsdam B");
+        assertThat(requests).anyMatch((final var r) -> r.contains("ZID=via-id"))
+                .anyMatch((final var r) -> r.contains("SID=via-id"))
+                .noneMatch((final var r) -> r.contains("SID=wrong") || r.contains("ZID=wrong"));
+    }
+
+    @Test
+    void normalizedNameUsesOfficialNameAndIdWithoutPrompting() throws Exception {
+        viaLocations = """
+                [{"type":"HST","name":"Potsdam, Anderer Bahnhof","id":"other"},
+                 {"type":"HST","name":"Potsdam, Stadt Bhf.","id":"stadt"}]
+                """;
+        response = "{\"connections\":[]}";
+        final var result = new BvgClient(base, Duration.ofSeconds(5))
+                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam Stadt Bahnhof");
+        assertThat(result.via()).isEqualTo("Potsdam, Stadt Bhf.");
+        assertThat(requests).anyMatch((final var r) -> r.contains("ZID=stadt"))
+                .noneMatch((final var r) -> r.contains("ZID=other"));
+    }
+
+    @Test
+    void cancelledSelectionDoesNotPlanAnyJourney() {
+        viaLocations = """
+                [{"type":"HST","name":"Potsdam A","id":"a"},
+                 {"type":"HST","name":"Potsdam B","id":"b"}]
+                """;
+        final StationPrompt prompt = new StationPrompt(new StringReader(""), new PrintWriter(new StringWriter()));
+        assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5), prompt)
+                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam"))
+                .isInstanceOf(IOException.class).hasMessageContaining("abgebrochen");
+        assertThat(requests).noneMatch((final var r) -> r.startsWith("/connections?"));
     }
 
     @Test
