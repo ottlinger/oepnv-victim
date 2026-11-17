@@ -8,7 +8,6 @@ import picocli.CommandLine;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -29,16 +28,10 @@ class JourneyConfigTest {
     @Test
     void readsMinimalConnectionWithDefaults() throws IOException {
         final Path file = config("# Saved connection\nfrom: Treuenbrietzen\nto: Jüterbog\n");
-        final Main main = new Main((final var from, final var to, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) -> {
-            assertThat(from).isEqualTo("Treuenbrietzen");
-            assertThat(to).isEqualTo("Jüterbog");
-            assertThat(via).isNull();
-            assertThat(departure).isNull();
-            assertThat(arrival).isNull();
-            assertThat(limit).isEqualTo(5);
+        final Main main = new Main((final var request, final var timeout, final var selector) -> {
+            assertThat(request).isEqualTo(new SearchRequest("Treuenbrietzen", "Jüterbog", null, 5, null, null));
             assertThat(timeout).isEqualTo(Duration.ofSeconds(30));
-            return new BvgClient.Result(from, to, via, URI.create("https://example.org"), List.of());
+            return new BvgClient.Result(request.from(), request.to(), request.via(), List.of());
         });
         assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                 .execute("--config", file.toString())).isZero();
@@ -49,15 +42,14 @@ class JourneyConfigTest {
         for (final String option : List.of("departure", "arrival")) {
             final Path file = config("from: 'Treuenbrietzen, Bahnhof'\nto: 'Jüterbog, Bahnhof'\n"
                     + "via: Potsdam\n" + option + ": '2026-11-07 9:15'\n");
-            final Main main = new Main((final var from, final var to, final var limit,
-                                        final var departure, final var arrival, final var via, final var timeout) -> {
-                assertThat(from).isEqualTo("Treuenbrietzen, Bahnhof");
-                assertThat(to).isEqualTo("Jüterbog, Bahnhof");
-                assertThat(via).isEqualTo("Potsdam");
-                assertThat(option.equals("departure") ? departure : arrival)
+            final Main main = new Main((final var request, final var timeout, final var selector) -> {
+                assertThat(request.from()).isEqualTo("Treuenbrietzen, Bahnhof");
+                assertThat(request.to()).isEqualTo("Jüterbog, Bahnhof");
+                assertThat(request.via()).isEqualTo("Potsdam");
+                assertThat(option.equals("departure") ? request.departure() : request.arrival())
                         .isEqualTo(LocalDateTime.of(2026, 11, 7, 9, 15));
-                assertThat(option.equals("departure") ? arrival : departure).isNull();
-                return new BvgClient.Result(from, to, via, URI.create("https://example.org"), List.of());
+                assertThat(option.equals("departure") ? request.arrival() : request.departure()).isNull();
+                return new BvgClient.Result(request.from(), request.to(), request.via(), List.of());
             });
             assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                     .execute("--config", file.toString())).isZero();
@@ -68,14 +60,10 @@ class JourneyConfigTest {
     void cliOverridesMatchingFieldsRegardlessOfOptionOrder() throws IOException {
         final Path file = config("from: saved\nto: saved\nvia: saved\ndeparture: '2026-11-07 9:00'\n");
         for (final boolean configFirst : List.of(true, false)) {
-            final Main main = new Main((final var from, final var to, final var limit,
-                                        final var departure, final var arrival, final var via, final var timeout) -> {
-                assertThat(from).isEqualTo("A");
-                assertThat(to).isEqualTo("B");
-                assertThat(via).isEqualTo("C");
-                assertThat(departure).isEqualTo(LocalDateTime.of(2026, 11, 8, 10, 0));
-                assertThat(limit).isEqualTo(2);
-                return new BvgClient.Result(from, to, via, URI.create("https://example.org"), List.of());
+            final Main main = new Main((final var request, final var timeout, final var selector) -> {
+                assertThat(request).isEqualTo(new SearchRequest("A", "B", "C", 2,
+                        LocalDateTime.of(2026, 11, 8, 10, 0), null));
+                return new BvgClient.Result(request.from(), request.to(), request.via(), List.of());
             });
             final var args = new java.util.ArrayList<>(List.of("--from", "A", "--to", "B", "--via", "C",
                     "--departure", "2026-11-08 10:00", "--limit", "2"));
@@ -88,11 +76,10 @@ class JourneyConfigTest {
     @Test
     void combinesPartialConfigWithCli() throws IOException {
         final Path file = config("from: A\n");
-        final Main main = new Main((final var from, final var to, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) -> {
-            assertThat(from).isEqualTo("A");
-            assertThat(to).isEqualTo("B");
-            return new BvgClient.Result(from, to, via, URI.create("https://example.org"), List.of());
+        final Main main = new Main((final var request, final var timeout, final var selector) -> {
+            assertThat(request.from()).isEqualTo("A");
+            assertThat(request.to()).isEqualTo("B");
+            return new BvgClient.Result(request.from(), request.to(), request.via(), List.of());
         });
         assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                 .execute("--config", file.toString(), "--to", "B")).isZero();
@@ -101,10 +88,8 @@ class JourneyConfigTest {
     @Test
     void savesOnlyYamlStationsAndKeepsTimeValues() throws IOException {
         final Path file = config("from: saved\nto: saved\nvia: saved\narrival: '2026-11-07 9:00'\n");
-        final Main main = new Main((final var from, final var to, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient.Result("CLI Start", "Resolved destination", "CLI Via",
-                        URI.create("https://example.org"), List.of()));
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient.Result("CLI Start", "Resolved destination", "CLI Via", List.of()));
         final StringWriter out = new StringWriter();
         final StringWriter err = new StringWriter();
         assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
@@ -119,9 +104,8 @@ class JourneyConfigTest {
     void doesNotAddCliOnlyStationsOrRewriteUnchangedFile() throws IOException {
         final String original = "# Keep this comment\nfrom: A\n";
         final Path file = config(original);
-        final Main main = new Main((final var from, final var to, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient.Result("A", "Resolved B", "Resolved C", URI.create("https://example.org"), List.of()));
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient.Result("A", "Resolved B", "Resolved C", List.of()));
         final StringWriter err = new StringWriter();
         assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(err))
                 .execute("--config", file.toString(), "--to", "B", "--via", "C")).isZero();
@@ -133,8 +117,7 @@ class JourneyConfigTest {
     void failedSearchDoesNotModifyConfig() throws IOException {
         final String original = "# Keep this comment\nfrom: A\nto: B\n";
         final Path file = config(original);
-        final Main main = new Main((final var from, final var to, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) -> {
+        final Main main = new Main((final var request, final var timeout, final var selector) -> {
             throw new IOException("Stationsauswahl abgebrochen");
         });
         assertThat(new CommandLine(main).setErr(new PrintWriter(new StringWriter()))
@@ -178,8 +161,7 @@ class JourneyConfigTest {
     }
 
     private CommandLine commandWithoutSearch(final StringWriter err) {
-        return new CommandLine(new Main((final var from, final var to, final var limit,
-                                         final var departure, final var arrival, final var via, final var timeout) ->
+        return new CommandLine(new Main((final var request, final var timeout, final var selector) ->
                 fail("Invalid configuration must not trigger a search"))).setErr(new PrintWriter(err));
     }
 }

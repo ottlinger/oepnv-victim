@@ -31,10 +31,6 @@ final class BvgClient {
     private final HttpClient http;
     private final StationSelector stationSelector;
 
-    BvgClient(final Duration timeout) {
-        this(URI.create("https://www.bvg.de"), timeout);
-    }
-
     BvgClient(final URI base, final Duration timeout) {
         this(base, timeout, BvgClient::ambiguousStation);
     }
@@ -51,81 +47,58 @@ final class BvgClient {
                 .followRedirects(HttpClient.Redirect.NORMAL).build();
     }
 
-    Result search(final String origin, final String destination, final int limit) throws IOException, InterruptedException {
-        return search(origin, destination, limit, null);
-    }
-
-    Result search(final String origin, final String destination, final int limit, final LocalDateTime departure)
-            throws IOException, InterruptedException {
-        return search(origin, destination, limit, departure, null);
-    }
-
-    Result search(final String origin, final String destination, final int limit,
-                  final LocalDateTime departure, final String via)
-            throws IOException, InterruptedException {
-        return search(origin, destination, limit, departure, null, via);
-    }
-
-    Result search(final String origin, final String destination, final int limit,
-                  final LocalDateTime departure, final LocalDateTime arrival, final String via)
-            throws IOException, InterruptedException {
-        if (departure != null && arrival != null) {
-            throw new IllegalArgumentException("--departure und --arrival dürfen nicht gemeinsam angegeben werden.");
-        }
+    Result search(final SearchRequest request) throws IOException, InterruptedException {
         // Journey data are not included in the server-rendered HTML. The Next.js configuration
         // provides the endpoints whose responses also populate the UI's journey details panel.
         Map<String, String> initialParams = new LinkedHashMap<>();
-        initialParams.put("origin", origin);
-        initialParams.put("destination", destination);
-        timeParams(initialParams, departure, arrival, "now");
+        initialParams.put("origin", request.from());
+        initialParams.put("destination", request.to());
+        timeParams(initialParams, request.departure(), request.arrival(), "now");
         URI initialPage = query(base.resolve(PAGE), initialParams);
         Endpoints endpoints = parseEndpoints(get(initialPage, "text/html"), base);
-        Station from = resolveStation(endpoints.locations(), origin);
-        Station to = resolveStation(endpoints.locations(), destination);
-        Station intermediate = via == null ? null : resolveStation(endpoints.locations(), via);
-
-        Map<String, String> pageParams = new LinkedHashMap<>();
-        pageParams.put("origin", from.name());
-        pageParams.put("destination", to.name());
-        pageParams.put("originId", from.id());
-        pageParams.put("originName", from.name());
-        pageParams.put("destinationId", to.id());
-        pageParams.put("destinationName", to.name());
-        timeParams(pageParams, departure, arrival, "now");
-        for (String product : List.of("sbahn", "subway", "bus", "tram", "ferry",
-                "longDistanceTraffic", "regionalTraffic")) {
-            pageParams.put(product, "on");
+        final Station from = resolveStation(endpoints.locations(), request.from());
+        final Station to = resolveStation(endpoints.locations(), request.to());
+        final Station via = request.via() == null ? null : resolveStation(endpoints.locations(), request.via());
+        final List<JsonNode> selected;
+        if (via == null) {
+            selected = searchConnections(endpoints.connections(), from, to,
+                    request.limit(), request.departure(), request.arrival());
+        } else if (request.arrival() != null) {
+            selected = searchViaArrival(endpoints.connections(), from, via, to, request);
+        } else {
+            selected = searchViaDeparture(endpoints.connections(), from, via, to, request);
         }
-        URI pageUrl = query(base.resolve(PAGE), pageParams);
-        List<JsonNode> selected = searchConnections(endpoints.connections(),
-                intermediate != null && arrival != null ? intermediate : from,
-                intermediate == null || arrival != null ? to : intermediate, limit, departure, arrival);
-        if (intermediate != null && arrival != null) {
-            selected = precedingJourneys(endpoints.connections(), from, intermediate, selected);
-        } else if (intermediate != null) {
-            List<JsonNode> combined = new ArrayList<>();
-            for (JsonNode first : selected) {
-                LocalDateTime ready = ViaJourney.effectiveTime(first.path("summary").path("arrival"));
-                // The endpoint accepts minutes only: round up rather than request a departure before arrival.
-                LocalDateTime onwardTime = ready.getSecond() == 0 ? ready : ready.plusMinutes(1).withSecond(0);
-                List<JsonNode> onward = searchConnections(endpoints.connections(), intermediate, to,
-                        Integer.MAX_VALUE, onwardTime, null);
-                for (JsonNode second : onward) {
-                    if (!ViaJourney.effectiveTime(second.path("summary").path("departure")).isBefore(ready)) {
-                        combined.add(ViaJourney.combine(first, second, intermediate.name()));
-                        break;
-                    }
-                }
-            }
-            selected = combined;
-        }
-        return new Result(from.name(), to.name(), intermediate == null ? null : intermediate.name(),
-                pageUrl, List.copyOf(selected));
+        return new Result(from.name(), to.name(), via == null ? null : via.name(), selected);
     }
 
-    private List<JsonNode> precedingJourneys(final URI endpoint, final Station from, final Station intermediate,
-                                             final List<JsonNode> onward) throws IOException, InterruptedException {
-        List<JsonNode> combined = new ArrayList<>();
+    private List<JsonNode> searchViaDeparture(final URI endpoint, final Station from, final Station intermediate,
+                                             final Station to, final SearchRequest request)
+            throws IOException, InterruptedException {
+        final List<JsonNode> preceding = searchConnections(endpoint, from, intermediate,
+                request.limit(), request.departure(), null);
+        final List<JsonNode> combined = new ArrayList<>();
+        for (final JsonNode first : preceding) {
+            final LocalDateTime ready = ViaJourney.effectiveTime(first.path("summary").path("arrival"));
+            // The endpoint accepts minutes only: round up rather than request a departure before arrival.
+            final LocalDateTime onwardTime = ready.getSecond() == 0 ? ready : ready.plusMinutes(1).withSecond(0);
+            final List<JsonNode> onward = searchConnections(endpoint, intermediate, to,
+                    Integer.MAX_VALUE, onwardTime, null);
+            for (final JsonNode second : onward) {
+                if (!ViaJourney.effectiveTime(second.path("summary").path("departure")).isBefore(ready)) {
+                    combined.add(ViaJourney.combine(first, second, intermediate.name()));
+                    break;
+                }
+            }
+        }
+        return List.copyOf(combined);
+    }
+
+    private List<JsonNode> searchViaArrival(final URI endpoint, final Station from, final Station intermediate,
+                                           final Station to, final SearchRequest request)
+            throws IOException, InterruptedException {
+        final List<JsonNode> onward = searchConnections(endpoint, intermediate, to,
+                request.limit(), null, request.arrival());
+        final List<JsonNode> combined = new ArrayList<>();
         for (JsonNode second : onward) {
             LocalDateTime latest = ViaJourney.effectiveTime(second.path("summary").path("departure"));
             List<JsonNode> preceding = searchConnections(endpoint, from, intermediate,
@@ -274,5 +247,5 @@ final class BvgClient {
 
     record Station(String name, String id) { }
     record Endpoints(URI locations, URI connections) { }
-    record Result(String origin, String destination, String via, URI pageUrl, List<JsonNode> connections) { }
+    record Result(String origin, String destination, String via, List<JsonNode> connections) { }
 }

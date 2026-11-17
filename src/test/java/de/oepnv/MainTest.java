@@ -7,7 +7,6 @@ import picocli.CommandLine;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,17 +29,12 @@ class MainTest {
         var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) -> {
-            assertThat(arrival).isNull();
-            assertThat(origin).isEqualTo("Treuenbrietzen");
-            assertThat(destination).isEqualTo("Jüterbog");
-            assertThat(limit).isEqualTo(2);
-            assertThat(departure).isEqualTo(LocalDateTime.of(2026, 11, 7, 15, 22));
-            assertThat(via).isEqualTo("Potsdam");
+        Main main = new Main((final var request, final var timeout, final var selector) -> {
+            assertThat(request).isEqualTo(new SearchRequest("Treuenbrietzen", "Jüterbog", "Potsdam", 2,
+                    LocalDateTime.of(2026, 11, 7, 15, 22), null));
             assertThat(timeout).isEqualTo(Duration.ofSeconds(12));
             return new BvgClient.Result("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof",
-                    "S Potsdam Hauptbahnhof", URI.create("https://example.org/not-for-output"),
+                    "S Potsdam Hauptbahnhof",
                     List.of(connection, connection));
         });
         CommandLine command = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
@@ -60,9 +54,8 @@ class MainTest {
         var connection = BvgClient.JSON.readTree(BvgClientTest.fixture()).path("connections").get(0);
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of(connection)));
+        Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient.Result(request.from(), request.to(), request.via(), List.of(connection)));
         CommandLine command = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
                 .setColorScheme(new CommandLine.Help.ColorScheme.Builder().ansi(CommandLine.Help.Ansi.ON).build());
         assertThat(command.execute("--from", "A", "--to", "B", "--json")).isZero();
@@ -77,14 +70,10 @@ class MainTest {
     @Test
     void emptyResultsUseDefaultsAndReturnSuccessWithoutViaHeader() {
         StringWriter out = new StringWriter();
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) -> {
-            assertThat(arrival).isNull();
-            assertThat(limit).isEqualTo(5);
+        Main main = new Main((final var request, final var timeout, final var selector) -> {
+            assertThat(request).isEqualTo(new SearchRequest("A", "B", null, 5, null, null));
             assertThat(timeout).isEqualTo(Duration.ofSeconds(30));
-            assertThat(departure).isNull();
-            assertThat(via).isNull();
-            return new BvgClient.Result(origin, destination, null, URI.create("https://example.org"), List.of());
+            return new BvgClient.Result(request.from(), request.to(), null, List.of());
         });
         assertThat(new CommandLine(main).setOut(new PrintWriter(out)).execute("--from", "A", "--to", "B")).isZero();
         assertThat(out.toString()).contains("Keine Verbindungen gefunden.").doesNotContain("Via:", "Verbindung 1:");
@@ -93,9 +82,8 @@ class MainTest {
     @Test
     void emptyJsonResultsAreAnEmptyArray() throws Exception {
         StringWriter out = new StringWriter();
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of()));
+        Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient.Result(request.from(), request.to(), request.via(), List.of()));
         assertThat(new CommandLine(main).setOut(new PrintWriter(out))
                 .execute("--from", "A", "--to", "B", "--json")).isZero();
         assertThat(BvgClient.JSON.readTree(out.toString())).isEqualTo(BvgClient.JSON.createArrayNode());
@@ -105,8 +93,7 @@ class MainTest {
     void queryErrorsAreWrittenOnlyToStderr() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) -> {
+        Main main = new Main((final var request, final var timeout, final var selector) -> {
             throw new IOException("Station ist nicht eindeutig: Station A; Station B");
         });
         int code = new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
@@ -120,8 +107,7 @@ class MainTest {
     void interruptedQueryRestoresInterruptFlagAndReturnsError() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) -> {
+        Main main = new Main((final var request, final var timeout, final var selector) -> {
             throw new InterruptedException("cancelled");
         });
         assertThat(Thread.currentThread().isInterrupted()).isFalse();
@@ -149,12 +135,11 @@ class MainTest {
 
     @Test
     void passesArrivalTimeToSearchWithoutNetwork() {
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) -> {
-            assertThat(departure).isNull();
-            assertThat(arrival).isEqualTo(LocalDateTime.of(2026, 11, 7, 16, 0));
-            assertThat(via).isEqualTo("Potsdam");
-            return new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of());
+        Main main = new Main((final var request, final var timeout, final var selector) -> {
+            assertThat(request.departure()).isNull();
+            assertThat(request.arrival()).isEqualTo(LocalDateTime.of(2026, 11, 7, 16, 0));
+            assertThat(request.via()).isEqualTo("Potsdam");
+            return new BvgClient.Result(request.from(), request.to(), request.via(), List.of());
         });
         assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                 .execute("--from", "A", "--to", "B", "--via", "Potsdam", "--arrival", "2026-11-07 16:00")).isZero();
@@ -166,11 +151,10 @@ class MainTest {
             for (final String time : List.of("0:00", "00:00", "9:00", "09:00", "9:15", "09:15", "23:59")) {
                 final LocalDateTime expected = LocalDateTime.of(2026, 11, 7,
                         Integer.parseInt(time.split(":")[0]), Integer.parseInt(time.split(":")[1]));
-                final Main main = new Main((final var origin, final var destination, final var limit,
-                                            final var departure, final var arrival, final var via, final var timeout) -> {
-                    assertThat(option.equals("--departure") ? departure : arrival).isEqualTo(expected);
-                    assertThat(option.equals("--departure") ? arrival : departure).isNull();
-                    return new BvgClient.Result(origin, destination, via, URI.create("https://example.org"), List.of());
+                final Main main = new Main((final var request, final var timeout, final var selector) -> {
+                    assertThat(option.equals("--departure") ? request.departure() : request.arrival()).isEqualTo(expected);
+                    assertThat(option.equals("--departure") ? request.arrival() : request.departure()).isNull();
+                    return new BvgClient.Result(request.from(), request.to(), request.via(), List.of());
                 });
                 assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                         .execute("--from", "A", "--to", "B", option, "2026-11-07 " + time))
@@ -182,8 +166,7 @@ class MainTest {
     @Test
     void rejectsConflictingTimesWithoutNetwork() {
         StringWriter err = new StringWriter();
-        Main main = new Main((final var origin, final var destination, final var limit,
-                              final var departure, final var arrival, final var via, final var timeout) -> {
+        Main main = new Main((final var request, final var timeout, final var selector) -> {
             return fail("Invalid arguments must not trigger a search");
         });
         assertThat(new CommandLine(main).setErr(new PrintWriter(err)).execute(

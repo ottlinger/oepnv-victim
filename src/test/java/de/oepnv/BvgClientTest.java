@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.StringReader;
@@ -77,7 +79,7 @@ class BvgClientTest {
     @Test
     void parsesHtmlAndFetchesDetailsWithResolvedIds() throws Exception {
         var result = new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", 1);
+                .search(new SearchRequest("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", null, 1, null, null));
         assertThat(result.connections()).hasSize(1);
         assertThat(result.connections().get(0).path("legs").get(0).path("service").path("name").asText()).isEqualTo("RB33");
         assertThat(result.destination()).isEqualTo("Jüterbog, Bahnhof");
@@ -87,12 +89,10 @@ class BvgClientTest {
         assertThat(requests).anyMatch((final var r) -> r.contains("input=Jüterbog, Bahnhof"));
         assertThat(requests).anyMatch((final var r) -> r.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
                 && r.contains("ZID=A=1@O=Jüterbog, Bahnhof@") && r.contains("products=127"));
-        String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
-        assertThat(page).contains("destinationName=Jüterbog, Bahnhof", "regionalTraffic=on", "timeSel=now");
         assertThat(requests.get(0)).contains("timeSel=now");
         String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
         assertThat(connectionRequest).contains("timeSel=depart");
-        for (String uri : List.of(page, requests.get(0), connectionRequest)) {
+        for (String uri : List.of(requests.get(0), connectionRequest)) {
             assertThat(uri).doesNotMatch(".*[?&]date=.*").doesNotMatch(".*[?&]time=.*");
         }
     }
@@ -100,11 +100,10 @@ class BvgClientTest {
     @Test
     void passesConfiguredDepartureToPageAndConnectionSearch() throws Exception {
         var result = new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", 1,
-                        LocalDateTime.of(2026, 11, 7, 15, 22));
-        String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
+                .search(new SearchRequest("Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", null, 1,
+                        LocalDateTime.of(2026, 11, 7, 15, 22), null));
         String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
-        for (String uri : List.of(requests.get(0), page, connectionRequest)) {
+        for (String uri : List.of(requests.get(0), connectionRequest)) {
             assertThat(uri).contains("timeSel=depart", "date=2026-11-07", "time=15:22")
                     .doesNotContain("timeSel=now");
         }
@@ -114,10 +113,10 @@ class BvgClientTest {
     @Test
     void passesConfiguredArrivalToPageAndConnectionSearch() throws Exception {
         var result = new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, null, LocalDateTime.of(2026, 11, 7, 16, 0), null);
-        String page = URLDecoder.decode(result.pageUrl().toString(), StandardCharsets.UTF_8);
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", null, 1,
+                        null, LocalDateTime.of(2026, 11, 7, 16, 0)));
         String connectionRequest = requests.stream().filter((final var r) -> r.startsWith("/connections?")).findFirst().orElseThrow();
-        for (String uri : List.of(requests.get(0), page, connectionRequest)) {
+        for (String uri : List.of(requests.get(0), connectionRequest)) {
             assertThat(uri).contains("timeSel=arrive", "date=2026-11-07", "time=16:00");
         }
         assertThat(result.connections()).hasSize(1);
@@ -127,9 +126,8 @@ class BvgClientTest {
     void cliNormalizesSingleDigitHoursForHttpRequests() {
         for (final String option : List.of("--departure", "--arrival")) {
             requests.clear();
-            final Main main = new Main((final var origin, final var destination, final var limit,
-                                        final var departure, final var arrival, final var via, final var timeout) ->
-                    new BvgClient(base, timeout).search(origin, destination, limit, departure, arrival, via));
+            final Main main = new Main((final var request, final var timeout, final var selector) ->
+                    new BvgClient(base, timeout, selector).search(request));
             final StringWriter err = new StringWriter();
             assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                     .setErr(new PrintWriter(err)).execute("--from", "Treuenbrietzen", "--to", "Jüterbog",
@@ -149,9 +147,8 @@ class BvgClientTest {
                 to: Jüterbog
                 arrival: '2026-11-07 9:00'
                 """);
-        final Main main = new Main((final var origin, final var destination, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient(base, timeout).search(origin, destination, limit, departure, arrival, via));
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request));
         final StringWriter out = new StringWriter();
         final StringWriter err = new StringWriter();
         assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
@@ -168,7 +165,7 @@ class BvgClientTest {
     void rejectsBothTimesBeforeAnyRequest() {
         LocalDateTime time = LocalDateTime.of(2026, 11, 7, 16, 0);
         assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, time, time, null))
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", null, 1, time, time)))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(requests).isEmpty();
     }
@@ -182,8 +179,8 @@ class BvgClientTest {
                 + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:40:00", "2026-11-07T23:55:00", "PT2M") + ","
                 + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:20:00", "2026-11-07T23:35:00", "") + ","
                 + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T23:45:00", "2026-11-07T23:58:00", "PT2M") + "]}";
-        var result = new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
-                null, LocalDateTime.of(2026, 11, 8, 0, 30), "Potsdam");
+        var result = new BvgClient(base, Duration.ofSeconds(5)).search(new SearchRequest(
+                "Treuenbrietzen", "Jüterbog", "Potsdam", 1, null, LocalDateTime.of(2026, 11, 8, 0, 30)));
         assertThat(result.connections()).hasSize(1);
         var combined = result.connections().get(0);
         assertThat(combined.path("summary").path("departure").path("time").asText()).isEqualTo("23:40:00");
@@ -203,8 +200,9 @@ class BvgClientTest {
                 + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof", "2026-11-07T15:30:00",
                 "2026-11-07T15:39:00", "PT2M") + "]}")) {
             response = preceding;
-            assertThat(new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
-                    null, LocalDateTime.of(2026, 11, 7, 16, 0), "Potsdam").connections()).isEmpty();
+            assertThat(new BvgClient(base, Duration.ofSeconds(5)).search(new SearchRequest(
+                    "Treuenbrietzen", "Jüterbog", "Potsdam", 1, null, LocalDateTime.of(2026, 11, 7, 16, 0)))
+                    .connections()).isEmpty();
         }
     }
 
@@ -215,8 +213,8 @@ class BvgClientTest {
         onwardResponse = "{\"connections\":["
                 + journey("S Potsdam Hauptbahnhof", "Jüterbog, Bahnhof", "2026-11-08T00:07:00", "2026-11-08T00:25:00", "") + ","
                 + journey("S Potsdam Hauptbahnhof", "Jüterbog, Bahnhof", "2026-11-08T00:10:00", "2026-11-08T00:30:00", "") + "]}";
-        var result = new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 1,
-                LocalDateTime.of(2026, 11, 7, 23, 50), "Potsdam");
+        var result = new BvgClient(base, Duration.ofSeconds(5)).search(new SearchRequest(
+                "Treuenbrietzen", "Jüterbog", "Potsdam", 1, LocalDateTime.of(2026, 11, 7, 23, 50), null));
         assertThat(result.via()).isEqualTo("S Potsdam Hauptbahnhof");
         assertThat(result.connections()).hasSize(1);
         assertCombinedViaJourney(result.connections().get(0));
@@ -242,7 +240,8 @@ class BvgClientTest {
         response = "{\"connections\":[" + journey("Treuenbrietzen", "S Potsdam Hauptbahnhof",
                 "2026-11-07T15:22:00", "2026-11-07T15:40:00", "") + "]}";
         assertThat(new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam").connections()).isEmpty();
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", "Potsdam", 1, null, null))
+                .connections()).isEmpty();
     }
 
     @Test
@@ -250,7 +249,7 @@ class BvgClientTest {
         viaLocations = "[{\"type\":\"HST\",\"name\":\"Potsdam A\",\"id\":\"a\"},"
                 + "{\"type\":\"HST\",\"name\":\"Potsdam B\",\"id\":\"b\"}]";
         assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam"))
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", "Potsdam", 1, null, null)))
                 .isInstanceOf(IOException.class).hasMessageContaining("Potsdam A; Potsdam B");
         assertThat(requests).noneMatch((final var r) -> r.startsWith("/connections?"));
     }
@@ -268,7 +267,8 @@ class BvgClientTest {
     @Test
     void emptyResultsAreNotASchemaError() throws Exception {
         response = "{\"connections\":[]}";
-        assertThat(new BvgClient(base, Duration.ofSeconds(5)).search("Treuenbrietzen", "Jüterbog", 5)
+        assertThat(new BvgClient(base, Duration.ofSeconds(5))
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", null, 5, null, null))
                 .connections()).isEmpty();
     }
 
@@ -276,7 +276,7 @@ class BvgClientTest {
     void reportsHttpErrors() {
         status = 503;
         assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 5))
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", null, 5, null, null)))
                 .isInstanceOf(IOException.class).hasMessageContaining("HTTP 503");
     }
 
@@ -284,7 +284,7 @@ class BvgClientTest {
     void reportsChangedResponseSchema() {
         response = "{\"error\":\"unavailable\"}";
         assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 5))
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", null, 5, null, null)))
                 .isInstanceOf(IOException.class).hasMessageContaining("connections");
     }
 
@@ -349,12 +349,10 @@ class BvgClientTest {
                 "2026-11-07T15:40:00", "2026-11-07T16:00:00", "") + "]}";
         final StringWriter out = new StringWriter();
         final StringWriter err = new StringWriter();
-        final StationPrompt prompt = new StationPrompt(new StringReader("2\n"), new PrintWriter(err));
-        final Main main = new Main((final var origin, final var destination, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient(base, timeout, prompt).search(origin, destination, limit, departure, arrival, via));
-        assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
-                .execute("--from", "Treuenbrietzen", "--to", "Jüterbog", "--via", "Potsdam", "--json", "--interactive"))
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request));
+        assertThat(executeWithInput(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err)),
+                "2\n", "--from", "Treuenbrietzen", "--to", "Jüterbog", "--via", "Potsdam", "--json", "--interactive"))
                 .isZero();
         assertThat(BvgClient.JSON.readTree(out.toString()).get(0).path("via").asText()).isEqualTo("Potsdam B");
         assertThat(err.toString()).contains("1) Potsdam A", "2) Potsdam B", "Übernommen: Potsdam B");
@@ -377,18 +375,15 @@ class BvgClientTest {
                 """;
         onwardResponse = "{\"connections\":[]}";
         final StringWriter err = new StringWriter();
-        final Main main = new Main((final var origin, final var destination, final var limit,
-                                    final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient(base, timeout, new StationPrompt(new StringReader("2\n"), new PrintWriter(err)))
-                        .search(origin, destination, limit, departure, arrival, via));
-        assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(err))
-                .execute("--config", config.toString(), "--interactive")).isZero();
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request));
+        assertThat(executeWithInput(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
+                .setErr(new PrintWriter(err)), "2\n", "--config", config.toString(), "--interactive")).isZero();
         assertThat(JourneyConfig.read(config)).isEqualTo(new JourneyConfig(
                 "Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", "Potsdam B", null, "2026-11-07 16:00"));
         assertThat(err.toString()).contains("Übernommen: Potsdam B", "Stationsnamen gespeichert in:");
-        final Main repeat = new Main((final var origin, final var destination, final var limit,
-                                      final var departure, final var arrival, final var via, final var timeout) ->
-                new BvgClient(base, timeout).search(origin, destination, limit, departure, arrival, via));
+        final Main repeat = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request));
         final StringWriter repeatErr = new StringWriter();
         assertThat(new CommandLine(repeat).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(repeatErr))
                 .execute("--config", config.toString())).isZero();
@@ -403,10 +398,30 @@ class BvgClientTest {
                 """;
         response = "{\"connections\":[]}";
         final var result = new BvgClient(base, Duration.ofSeconds(5))
-                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam Stadt Bahnhof");
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", "Potsdam Stadt Bahnhof", 1, null, null));
         assertThat(result.via()).isEqualTo("Potsdam, Stadt Bhf.");
         assertThat(requests).anyMatch((final var r) -> r.contains("ZID=stadt"))
                 .noneMatch((final var r) -> r.contains("ZID=other"));
+    }
+
+    @Test
+    void cliCancellationUsesSharedSelectorAndLeavesYamlUntouched(@TempDir final Path directory) throws Exception {
+        final String original = "from: Treuenbrietzen\nto: Jüterbog\nvia: Potsdam\n";
+        final Path config = Files.writeString(directory.resolve("journey.yml"), original);
+        viaLocations = """
+                [{"type":"HST","name":"Potsdam A","id":"a"},
+                 {"type":"HST","name":"Potsdam B","id":"b"}]
+                """;
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request));
+        final StringWriter out = new StringWriter();
+        final StringWriter err = new StringWriter();
+        assertThat(executeWithInput(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err)),
+                "\n", "--config", config.toString(), "--interactive", "--json")).isEqualTo(1);
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).contains("Bitte auswählen", "Stationsauswahl abgebrochen");
+        assertThat(requests).noneMatch((final var r) -> r.startsWith("/connections?"));
+        assertThat(Files.readString(config)).isEqualTo(original);
     }
 
     @Test
@@ -417,7 +432,7 @@ class BvgClientTest {
                 """;
         final StationPrompt prompt = new StationPrompt(new StringReader(""), new PrintWriter(new StringWriter()));
         assertThatThrownBy(() -> new BvgClient(base, Duration.ofSeconds(5), prompt)
-                .search("Treuenbrietzen", "Jüterbog", 1, null, "Potsdam"))
+                .search(new SearchRequest("Treuenbrietzen", "Jüterbog", "Potsdam", 1, null, null)))
                 .isInstanceOf(IOException.class).hasMessageContaining("abgebrochen");
         assertThat(requests).noneMatch((final var r) -> r.startsWith("/connections?"));
     }
@@ -437,6 +452,16 @@ class BvgClientTest {
                 .hasMessageNotContaining("poi");
         assertThatThrownBy(() -> BvgClient.selectStation(BvgClient.JSON.readTree("[]"), "unbekannt"))
                 .isInstanceOf(IOException.class);
+    }
+
+    private static int executeWithInput(final CommandLine command, final String input, final String... args) {
+        final InputStream original = System.in;
+        try {
+            System.setIn(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
+            return command.execute(args);
+        } finally {
+            System.setIn(original);
+        }
     }
 
     static String fixture() throws IOException {

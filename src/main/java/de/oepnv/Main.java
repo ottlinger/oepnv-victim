@@ -30,7 +30,8 @@ public final class Main implements Callable<Integer> {
     private final JourneySearch search;
 
     public Main() {
-        this(null);
+        this((final var request, final var timeout, final var selector) ->
+                new BvgClient(timeout, selector).search(request));
     }
 
     Main(final JourneySearch search) {
@@ -39,9 +40,8 @@ public final class Main implements Callable<Integer> {
 
     @FunctionalInterface
     interface JourneySearch {
-        BvgClient.Result search(final String origin, final String destination, final int limit,
-                                final LocalDateTime departure, final LocalDateTime arrival,
-                                final String via, final Duration timeout) throws IOException, InterruptedException;
+        BvgClient.Result search(final SearchRequest request, final Duration timeout,
+                                final BvgClient.StationSelector selector) throws IOException, InterruptedException;
     }
 
     @Option(names = "--config", paramLabel = "FILE",
@@ -101,18 +101,13 @@ public final class Main implements Callable<Integer> {
                     "--departure und --arrival dürfen nicht gemeinsam angegeben werden.");
         }
         try {
-            final BvgClient.Result result;
-            if (search == null) {
-                final BvgClient.StationSelector selector = interactive || System.console() != null
-                        ? new StationPrompt(System.console() == null
-                                ? new InputStreamReader(System.in, StandardCharsets.UTF_8) : System.console().reader(),
-                                spec.commandLine().getErr())
-                        : BvgClient::ambiguousStation;
-                result = new BvgClient(Duration.ofSeconds(timeout), selector)
-                        .search(origin, destination, limit, departure, arrival, via);
-            } else {
-                result = search.search(origin, destination, limit, departure, arrival, via, Duration.ofSeconds(timeout));
-            }
+            final SearchRequest request = new SearchRequest(origin, destination, via, limit, departure, arrival);
+            final BvgClient.StationSelector selector = interactive || System.console() != null
+                    ? new StationPrompt(System.console() == null
+                            ? new InputStreamReader(System.in, StandardCharsets.UTF_8) : System.console().reader(),
+                            spec.commandLine().getErr())
+                    : BvgClient::ambiguousStation;
+            final BvgClient.Result result = search.search(request, Duration.ofSeconds(timeout), selector);
             updateConfig(result);
             if (json) {
                 spec.commandLine().getOut().println(BvgClient.JSON.writerWithDefaultPrettyPrinter()
