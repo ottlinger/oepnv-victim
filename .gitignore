@@ -2,6 +2,10 @@
 # Maven build output
 /target/
 
+# Root-level YAML configuration (keep the shared commute configuration and ignore other templates)
+/*.yml
+!/commute.yml
+
 # IDE files (share only the project code style)
 /.idea/*
 !/.idea/codeStyles/
