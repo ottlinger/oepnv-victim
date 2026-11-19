@@ -45,7 +45,7 @@ public final class Main implements Callable<Integer> {
                                 final BvgClient.StationSelector selector) throws IOException, InterruptedException;
     }
 
-    @Option(names = "--config", paramLabel = "FILE",
+    @Option(names = {"-c", "--config"}, paramLabel = "FILE",
             description = "YAML-Datei mit from, to, via, departure, arrival oder withFastTrains; aufgelöste Stationsnamen werden gespeichert. CLI-Optionen haben Vorrang.")
     private Path config;
 
@@ -57,34 +57,34 @@ public final class Main implements Callable<Integer> {
             description = "Eindeutige Zielstation, z. B. 'Jüterbog, Bahnhof'.")
     private String destination;
 
-    @Option(names = "--via", paramLabel = "STATION",
+    @Option(names = {"-v", "--via"}, paramLabel = "STATION",
             description = "Optionale eindeutige Zwischenstation, z. B. 'S Potsdam Hauptbahnhof'.")
     private String via;
 
-    @Option(names = "--departure", paramLabel = "\"YYYY-MM-DD HH:mm\"",
+    @Option(names = {"-d", "--departure"}, paramLabel = "\"YYYY-MM-DD HH:mm\"",
             converter = DepartureTimeConverter.class,
             description = "Abfahrtszeit in Berlin, z. B. '2026-11-07 9:00' (Stunde ein- oder zweistellig; Standard: jetzt).")
     private LocalDateTime departure;
 
-    @Option(names = "--arrival", paramLabel = "\"YYYY-MM-DD HH:mm\"",
+    @Option(names = {"-a", "--arrival"}, paramLabel = "\"YYYY-MM-DD HH:mm\"",
             converter = DepartureTimeConverter.class,
             description = "Ankunftszeit in Berlin, z. B. '2026-11-07 9:00' (Stunde ein- oder zweistellig; nicht mit --departure kombinierbar).")
     private LocalDateTime arrival;
 
-    @Option(names = "--with-fast-trains", arity = "0..1", fallbackValue = "true",
+    @Option(names = {"-w", "--with-fast-trains"}, arity = "0..1", fallbackValue = "true",
             description = "Fernverkehr (ICE/IC/EC usw.) einschließen; Standard: nur Nahverkehr, ohne Garantie für Deutschlandticket-Gültigkeit.")
     private boolean withFastTrains;
 
-    @Option(names = "--limit", defaultValue = "5", description = "Maximale Anzahl aus der ersten Ergebnisseite (Standard: 5).")
+    @Option(names = {"-l", "--limit"}, defaultValue = "5", description = "Maximale Anzahl aus der ersten Ergebnisseite (Standard: 5).")
     private int limit;
 
-    @Option(names = "--json", description = "Verbindungen mit allen gelieferten Details als JSON ausgeben.")
+    @Option(names = {"-j", "--json"}, description = "Verbindungen mit allen gelieferten Details als JSON ausgeben.")
     private boolean json;
 
-    @Option(names = "--interactive", description = "Stationsauswahl auch ohne erkanntes Terminal anbieten (Eingabe über stdin).")
+    @Option(names = {"-i", "--interactive"}, description = "Stationsauswahl auch ohne erkanntes Terminal anbieten (Eingabe über stdin).")
     private boolean interactive;
 
-    @Option(names = "--timeout", defaultValue = "30", description = "Zeitlimit pro HTTP-Anfrage in Sekunden (Standard: 30).")
+    @Option(names = {"-T", "--timeout"}, defaultValue = "30", description = "Zeitlimit pro HTTP-Anfrage in Sekunden (Standard: 30).")
     private int timeout;
 
     @Spec

@@ -42,13 +42,29 @@ All arguments are forwarded unchanged:
 ./run.sh --help
 ```
 
-The station options also support short aliases: `-f` for `--from` and `-t` for
-`--to`. Short options use one hyphen, long options use two. Both forms can be mixed
-and override saved YAML values in the same way:
+All options support short aliases. Short options use one hyphen, long options
+use two. Both forms can be mixed and override saved YAML values in the same way:
+
+| Short | Long | Purpose |
+| --- | --- | --- |
+| `-c` | `--config` | Load a YAML configuration |
+| `-f` | `--from` | Origin station |
+| `-t` | `--to` | Destination station |
+| `-v` | `--via` | Intermediate station |
+| `-d` | `--departure` | Departure time |
+| `-a` | `--arrival` | Arrival time |
+| `-w` | `--with-fast-trains` | Include long-distance trains (`-w=false` to disable) |
+| `-l` | `--limit` | Maximum number of journeys |
+| `-j` | `--json` | JSON output |
+| `-i` | `--interactive` | Enable station selection via stdin |
+| `-T` | `--timeout` | HTTP timeout in seconds (uppercase `T`; `-t` is destination) |
+| `-h` | `--help` | Show help |
+| `-V` | `--version` | Show version (uppercase `V`; `-v` is via) |
 
 ```sh
 ./run.sh -f "Treuenbrietzen, Bahnhof" -t "Jüterbog, Bahnhof"
 ./run.sh --from "Treuenbrietzen, Bahnhof" -t "Jüterbog, Bahnhof"
+./run.sh -c commute.yml -l 2 -j
 ```
 
 `--help` (or `-h`) lists both forms. YAML output and saved configuration files

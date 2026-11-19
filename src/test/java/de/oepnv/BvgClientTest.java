@@ -6,6 +6,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 import java.io.ByteArrayInputStream;
@@ -202,8 +204,9 @@ class BvgClientTest {
         }
     }
 
-    @Test
-    void cliLoadsYamlAndQueriesLocalServer(@TempDir final Path directory) throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = {"--config", "-c"})
+    void cliLoadsYamlAndQueriesLocalServer(final String configOption, @TempDir final Path directory) throws IOException {
         final Path config = Files.writeString(directory.resolve("journey.yml"), """
                 from: Treuenbrietzen
                 to: Jüterbog
@@ -214,7 +217,7 @@ class BvgClientTest {
         final StringWriter out = new StringWriter();
         final StringWriter err = new StringWriter();
         assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
-                .execute("--config", config.toString(), "--json")).as("%s", err).isZero();
+                .execute(configOption, config.toString(), "-j")).as("%s", err).isZero();
         assertThat(err.toString()).contains("Stationsnamen gespeichert in:");
         assertThat(JourneyConfig.read(config)).isEqualTo(new JourneyConfig(
                 "Treuenbrietzen, Bahnhof", "Jüterbog, Bahnhof", null, null, "2026-11-07 9:00"));

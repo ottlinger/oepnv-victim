@@ -156,9 +156,9 @@ class JourneyConfigTest {
                         LocalDateTime.of(2026, 11, 8, 10, 0), null));
                 return new BvgClient.Result(request.from(), request.to(), request.via(), List.of());
             });
-            final var args = new java.util.ArrayList<>(List.of("--from", "A", "--to", "B", "--via", "C",
-                    "--departure", "2026-11-08 10:00", "--limit", "2"));
-            args.addAll(configFirst ? 0 : args.size(), List.of("--config", file.toString()));
+            final var args = new java.util.ArrayList<>(List.of("-f", "A", "--to", "B", "-v", "C",
+                    "-d", "2026-11-08 10:00", "-l", "2"));
+            args.addAll(configFirst ? 0 : args.size(), List.of("-c", file.toString()));
             assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter()))
                     .execute(args.toArray(String[]::new))).isZero();
         }
@@ -203,7 +203,7 @@ class JourneyConfigTest {
         });
         final StringWriter err = new StringWriter();
         assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(err))
-                .execute("--config", file.toString(), "-f", "CLI origin", "-t", "CLI destination")).isZero();
+                .execute("-c", file.toString(), "-f", "CLI origin", "-t", "CLI destination")).isZero();
         assertThat(Files.readString(file)).isEqualTo(original);
         assertThat(err.toString()).isEmpty();
     }

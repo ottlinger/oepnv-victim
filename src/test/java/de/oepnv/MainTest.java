@@ -2,6 +2,8 @@
 package de.oepnv;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import picocli.CommandLine;
 
 import java.io.IOException;
@@ -25,6 +27,33 @@ class MainTest {
         assertThat(code).isZero();
         assertThat(out.toString()).contains("-f, --from", "-t, --to", "--via", "Stationen müssen eindeutig sein",
                 "BVG-Stationssuche", "--departure", "--arrival").doesNotContain("--startzeit");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "-c, --config, commute.yml",
+            "-f, --from, A",
+            "-t, --to, B",
+            "-v, --via, C",
+            "-d, --departure, 2026-11-07 9:00",
+            "-a, --arrival, 2026-11-07 10:00",
+            "-w, --with-fast-trains, true",
+            "-w, --with-fast-trains, false",
+            "-l, --limit, 2",
+            "-j, --json, true",
+            "-i, --interactive, true",
+            "-T, --timeout, 12",
+            "-h, --help, true",
+            "-V, --version, true"
+    })
+    void shortOptionsMatchLongOptions(final String shortOption, final String longOption, final String value) {
+        final CommandLine command = new CommandLine(new Main());
+        final var shortResult = command.parseArgs(shortOption + "=" + value);
+        final Object shortValue = shortResult.matchedOptionValue(longOption, null);
+        final var longResult = new CommandLine(new Main()).parseArgs(longOption + "=" + value);
+        assertThat(shortResult.hasMatchedOption(longOption)).isTrue();
+        assertThat(shortValue).isNotNull().isEqualTo(longResult.matchedOptionValue(longOption, null));
+        assertThat(command.getUsageMessage()).contains(shortOption + ", " + longOption);
     }
 
     @Test
