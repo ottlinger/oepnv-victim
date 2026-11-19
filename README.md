@@ -42,6 +42,19 @@ All arguments are forwarded unchanged:
 ./run.sh --help
 ```
 
+The station options also support short aliases: `-f` for `--from` and `-t` for
+`--to`. Short options use one hyphen, long options use two. Both forms can be mixed
+and override saved YAML values in the same way:
+
+```sh
+./run.sh -f "Treuenbrietzen, Bahnhof" -t "Jüterbog, Bahnhof"
+./run.sh --from "Treuenbrietzen, Bahnhof" -t "Jüterbog, Bahnhof"
+```
+
+`--help` (or `-h`) lists both forms. YAML output and saved configuration files
+always use the readable full keys `from` and `to`, never `f` or `t`, even when
+the query uses the short CLI aliases.
+
 The script also works when called from another directory; relative paths in arguments
 (such as `--config commute.yml`) remain relative to your current working directory.
 

@@ -193,6 +193,22 @@ class JourneyConfigTest {
     }
 
     @Test
+    void shortStationOptionsOverrideConfigWithoutSavingCliStations() throws IOException {
+        final String original = "# Keep saved stations\nfrom: saved origin\nto: saved destination\n";
+        final Path file = config(original);
+        final Main main = new Main((final var request, final var timeout, final var selector) -> {
+            assertThat(request.from()).isEqualTo("CLI origin");
+            assertThat(request.to()).isEqualTo("CLI destination");
+            return new BvgClient.Result("Resolved CLI origin", "Resolved CLI destination", null, List.of());
+        });
+        final StringWriter err = new StringWriter();
+        assertThat(new CommandLine(main).setOut(new PrintWriter(new StringWriter())).setErr(new PrintWriter(err))
+                .execute("--config", file.toString(), "-f", "CLI origin", "-t", "CLI destination")).isZero();
+        assertThat(Files.readString(file)).isEqualTo(original);
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
     void keepsSingleLicenseHeaderWhenUpdatingExportedTemplate() throws IOException {
         final SearchRequest request = new SearchRequest("A", "B", null, 5, null, null);
         final BvgClient.Result result = new BvgClient.Result("A", "B", null, List.of());

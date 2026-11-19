@@ -98,6 +98,25 @@ class BvgClientTest {
     }
 
     @Test
+    void cliShortStationOptionsResolveStationsAndFetchJourneys() {
+        final Main main = new Main((final var request, final var timeout, final var selector) ->
+                new BvgClient(base, timeout, selector).search(request));
+        final StringWriter out = new StringWriter();
+        final StringWriter err = new StringWriter();
+        assertThat(new CommandLine(main).setOut(new PrintWriter(out)).setErr(new PrintWriter(err))
+                .execute("-f", "Treuenbrietzen", "-t", "Jüterbog")).isZero();
+        assertThat(out.toString()).contains("Start: Treuenbrietzen, Bahnhof", "Ziel:  Jüterbog, Bahnhof",
+                "Verbindung 1:");
+        final String yaml = out.toString().substring(out.toString().indexOf("# Aktuelle Abfrage als YAML"));
+        assertThat(yaml).contains("from: \"Treuenbrietzen, Bahnhof\"", "to: \"Jüterbog, Bahnhof\"")
+                .doesNotContain("\nf:", "\nt:", "\n-f:", "\n-t:");
+        assertThat(requests).anyMatch((final var request) -> request.startsWith("/connections?")
+                && request.contains("SID=A=1@O=Treuenbrietzen, Bahnhof@")
+                && request.contains("ZID=A=1@O=Jüterbog, Bahnhof@"));
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
     void cliDefaultsToLocalTransportAndExplicitlyEnablesLongDistance() {
         for (final String option : List.of("", "--with-fast-trains", "--with-fast-trains=false")) {
             requests.clear();

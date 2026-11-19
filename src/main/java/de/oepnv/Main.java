@@ -49,11 +49,11 @@ public final class Main implements Callable<Integer> {
             description = "YAML-Datei mit from, to, via, departure, arrival oder withFastTrains; aufgelöste Stationsnamen werden gespeichert. CLI-Optionen haben Vorrang.")
     private Path config;
 
-    @Option(names = "--from", paramLabel = "STATION",
+    @Option(names = {"-f", "--from"}, paramLabel = "STATION",
             description = "Eindeutige Startstation, z. B. 'Treuenbrietzen, Bahnhof'.")
     private String origin;
 
-    @Option(names = "--to", paramLabel = "STATION",
+    @Option(names = {"-t", "--to"}, paramLabel = "STATION",
             description = "Eindeutige Zielstation, z. B. 'Jüterbog, Bahnhof'.")
     private String destination;
 

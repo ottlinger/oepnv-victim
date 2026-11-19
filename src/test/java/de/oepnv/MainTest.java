@@ -23,8 +23,21 @@ class MainTest {
         StringWriter out = new StringWriter();
         int code = new CommandLine(new Main()).setOut(new PrintWriter(out)).execute("--help");
         assertThat(code).isZero();
-        assertThat(out.toString()).contains("--from", "--to", "--via", "Stationen müssen eindeutig sein",
+        assertThat(out.toString()).contains("-f, --from", "-t, --to", "--via", "Stationen müssen eindeutig sein",
                 "BVG-Stationssuche", "--departure", "--arrival").doesNotContain("--startzeit");
+    }
+
+    @Test
+    void shortAndLongStationOptionsCanBeMixed() {
+        for (final String from : List.of("-f", "--from")) {
+            for (final String to : List.of("-t", "--to")) {
+                final var parsed = new CommandLine(new Main()).parseArgs(from, "A", to, "B");
+                assertThat(parsed.<String>matchedOptionValue("--from", null)).isEqualTo("A");
+                assertThat(parsed.<String>matchedOptionValue("--to", null)).isEqualTo("B");
+                assertThat(parsed.hasMatchedOption("--from")).isTrue();
+                assertThat(parsed.hasMatchedOption("--to")).isTrue();
+            }
+        }
     }
 
     @Test
