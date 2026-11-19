@@ -52,7 +52,8 @@ class MainTest {
         final String yaml = out.toString().substring(out.toString().indexOf("# Aktuelle Abfrage als YAML"));
         assertThat(out.toString().indexOf("# Aktuelle Abfrage als YAML"))
                 .isGreaterThan(out.toString().indexOf("Verbindung 2:"));
-        assertThat(yaml).contains("from: \"Treuenbrietzen, Bahnhof\"", "to: \"Jüterbog, Bahnhof\"",
+        assertThat(yaml).contains("# SPDX-License-Identifier: AGPL-3.0-only\n",
+                "from: \"Treuenbrietzen, Bahnhof\"", "to: \"Jüterbog, Bahnhof\"",
                 "via: \"S Potsdam Hauptbahnhof\"", "departure: \"2026-11-07 15:22\"",
                 "arrival: \"2026-11-07 12:47\"", "# Bitte zwischen Abfahrtszeit")
                 .doesNotContain("\u001B");

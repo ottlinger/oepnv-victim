@@ -34,7 +34,8 @@ class JourneyConfigTest {
         final String yaml = JourneyConfig.queryYaml(request, result, LocalDateTime.of(2026, 11, 7, 9, 15, 42));
         assertThat(JourneyConfig.read(config(yaml))).isEqualTo(new JourneyConfig(
                 result.origin(), result.destination(), null, "2026-11-07 09:15", "YYYY-MM-DD HH:mm"));
-        assertThat(yaml).contains("# Bitte zwischen Abfahrtszeit", "entfernen oder auskommentieren")
+        assertThat(yaml).startsWith("# SPDX-License-Identifier: AGPL-3.0-only\n")
+                .contains("# Bitte zwischen Abfahrtszeit", "entfernen oder auskommentieren")
                 .doesNotContain("via:", "limit:", "timeout:", "null");
         assertThat(yaml.indexOf("# Bitte zwischen")).isLessThan(yaml.indexOf("departure:"));
     }
@@ -186,8 +187,21 @@ class JourneyConfigTest {
                 .execute("--config", file.toString(), "--from", "Override", "--via", "Override", "--json")).isZero();
         assertThat(JourneyConfig.read(file)).isEqualTo(new JourneyConfig(
                 "saved", "Resolved destination", "saved", null, "2026-11-07 9:00"));
+        assertThat(Files.readString(file)).startsWith("# SPDX-License-Identifier: AGPL-3.0-only\n");
         assertThat(out.toString().strip()).isEqualTo("[ ]");
         assertThat(err.toString()).contains("Stationsnamen gespeichert in:");
+    }
+
+    @Test
+    void keepsSingleLicenseHeaderWhenUpdatingExportedTemplate() throws IOException {
+        final SearchRequest request = new SearchRequest("A", "B", null, 5, null, null);
+        final BvgClient.Result result = new BvgClient.Result("A", "B", null, List.of());
+        final Path file = config(JourneyConfig.queryYaml(request, result, LocalDateTime.of(2026, 11, 7, 9, 0)));
+        assertThat(JourneyConfig.updateStations(file, java.util.Map.of("from", "Resolved A"))).isTrue();
+        assertThat(Files.readString(file)).startsWith("# SPDX-License-Identifier: AGPL-3.0-only\n");
+        assertThat(Files.readString(file).lines()
+                .filter((final String line) -> line.contains("SPDX-License-Identifier")).count()).isEqualTo(1);
+        assertThat(JourneyConfig.read(file).from()).isEqualTo("Resolved A");
     }
 
     @Test

@@ -24,6 +24,7 @@ record JourneyConfig(String from, String to, String via, String departure, Strin
         this(from, to, via, departure, arrival, false);
     }
 
+    private static final String LICENSE_HEADER = "# SPDX-License-Identifier: AGPL-3.0-only\n";
     private static final Set<String> FIELDS = Set.of("from", "to", "via", "departure", "arrival", "withFastTrains");
     private static final ObjectMapper YAML = new ObjectMapper(YAMLFactory.builder()
             .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -52,7 +53,7 @@ record JourneyConfig(String from, String to, String via, String departure, Strin
         times.put("departure", departure == null ? resultTime(result, "departure", format) : departure.format(format));
         times.put("arrival", request.arrival() == null
                 ? resultTime(result, "arrival", format) : request.arrival().format(format));
-        return yaml(root)
+        return LICENSE_HEADER + yaml(root)
                 + "# Bitte zwischen Abfahrtszeit (departure) und Ankunftszeit (arrival) entscheiden,\n"
                 + "# damit die Anfrage sinnvoll ist: genau eine Zeitangabe behalten, die andere entfernen oder auskommentieren.\n"
                 + "# Die zusätzliche Zeit stammt aus der ersten Verbindung (Fahrplanzeit); Platzhalter bitte ergänzen.\n"
@@ -90,7 +91,7 @@ record JourneyConfig(String from, String to, String via, String departure, Strin
         final Path target = path.toRealPath();
         final Path temporary = Files.createTempFile(target.getParent(), ".journey-", ".yml");
         try {
-            YAML.writeValue(temporary.toFile(), root);
+            Files.writeString(temporary, LICENSE_HEADER + yaml(root));
             Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } finally {
             Files.deleteIfExists(temporary);
